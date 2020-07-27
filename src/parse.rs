@@ -1,7 +1,7 @@
 //! # Parse
 //!
 //! This module provides a way to lazily parse JSON data.
-//! A [`Parser`] cand read from any object implementing [`Read`], and will yield
+//! A [`Parser`] can read from any object implementing [`Read`], and will yield
 //! [`Json`] values in sequence like an iterator. Fixed-size items are parsed as values directly,
 //! but for strings, arrays and objects subparsers are returned instead.
 //! The caller can then invoke these subparsers to effectively parse the corresponsing item content.
