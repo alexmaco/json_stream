@@ -1,22 +1,36 @@
-#![forbid(unsafe_code)]
-#![forbid(bare_trait_objects)]
-/*!
- *
- *
- */
+//! # Parse
+//!
+//! This module provides a way to lazily parse JSON data.
+//! A [`Parser`] cand read from any object implementing [`Read`], and will yield
+//! [`Json`] values in sequence like an iterator. Fixed-size items are parsed as values directly,
+//! but for strings, arrays and objects subparsers are returned instead.
+//! The caller can then invoke these subparsers to effectively parse the corresponsing item content.
+//!
+//!
+//! ## Skipping
+//!
+//! When a [`ParseString`], [`ParseArray`], [`ParseObject`], or [`KeyVal`] is dropped,
+//! it marks that item for skipping. When the next JSON item is requested via a call to `fn next`,
+//! the item beyond the skipped one is returned.
+//!
+//! This allows efficient skipping of uninteresting items.
 
-use std::borrow::Cow;
 use std::io::{ErrorKind, Read};
 
+/// Reads bytes from a [`Read`], parses them as [`Json`], and returns a stream of values or sub-parsers via `fn next()`
 pub struct Parser<R> {
     src: R,
 }
 
 impl<R: Read> Parser<R> {
+    /// Constructs a new Parser that will read from the provided object.
     pub fn new(r: R) -> Self {
         Self { src: r }
     }
 
+    /// Returns the next JSON item.
+    /// A Parser will read any number of whitespace-separated JSON items and return them in order.
+    /// Returns None when the input is exhausted.
     pub fn next(&mut self) -> Option<Json> {
         let j = match self.next_byte()? {
             b'0'..=b'9' | b'-' => Json::Null,
@@ -53,7 +67,16 @@ pub struct ParseArray<'a> {
 
 impl<'a> ParseArray<'a> {
     pub fn next(&mut self) -> Option<Json> {
-        Some(Json::Null)
+        let j = loop {
+            break match self.base.next_byte()? {
+                b'"' => Json::String(ParseString { base: self.base }),
+                b',' => continue,
+                b']' => return None,
+                other => panic!("unhandled {:?}", char::from(other)),
+            }
+        };
+
+        Some(j)
     }
 }
 
@@ -90,19 +113,23 @@ impl<'a> KeyVal<'a> {
 }
 
 /// Reads a string. Reading can be done as a whole string,
-/// (or even str when no escape sequences are present),
 /// or char-by-char if the string is expected to be very large.
 pub struct ParseString<'a> {
     base: &'a mut dyn Parse,
 }
 
 impl<'a> ParseString<'a> {
-    pub fn read_cow(self) -> Cow<'a, str> {
-        Cow::Borrowed("")
-    }
-
     pub fn read_owned(self) -> String {
-        "".into()
+        let mut buf = String::new();
+        loop {
+            let c = self.base.next_byte().unwrap();
+            if c == b'"' {
+                break;
+            }
+
+            buf.push(c.into());
+        }
+        buf
     }
 
     pub fn read_chars(self) -> Chars<'a> {
