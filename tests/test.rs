@@ -2,8 +2,7 @@ use json_stream::parse::*;
 
 #[test]
 fn example() {
-    let s = String::from(r#"["a","b","c"]"#);
-    let mut p = Parser::new(s.as_bytes());
+    let mut p = Parser::new(r#"["a","b","c"]"#.as_bytes());
 
     let mut arr = match p.next() {
         Some(Json::Array(seq)) => seq,
@@ -25,8 +24,7 @@ fn example() {
 
 #[test]
 fn chars() {
-    let s = String::from(r#""abc""#);
-    let mut p = Parser::new(s.as_bytes());
+    let mut p = Parser::new(r#""abc""#.as_bytes());
 
     let s = match p.next() {
         Some(Json::String(s)) => s,

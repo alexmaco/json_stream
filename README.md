@@ -19,7 +19,7 @@ A streaming JSON parser/emitter for rust.
 ## Examples
 
 ```rust
-let s = String::from(r#"["a", "b", "c"]"#);
+let s = r#"["a", "b", "c"]"#;
 let mut p = Parser::new(s.as_bytes());
 
 let mut arr = match p.next() {
