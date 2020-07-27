@@ -3,7 +3,7 @@
 //! # JSON Stream
 //!
 //! This library provides a lazy pull parser, as well as an emitter for
-//! reading and writing JSON to anything implementing [`io::Read`](std::io::Read) and [`io::Write`].
+//! reading and writing JSON to anything implementing [`io::Read`](std::io::Read) and [`io::Write`](std::io::Write).
 //!
 //! The main use is processing JSON values that would not otherwise fit in RAM.
 //!
