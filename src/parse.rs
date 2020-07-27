@@ -32,14 +32,13 @@ impl<R: Read> Parser<R> {
     /// A Parser will read any number of whitespace-separated JSON items and return them in order.
     /// Returns None when the input is exhausted.
     pub fn next(&mut self) -> Option<Json> {
-        let j = match self.next_byte()? {
-            b'0'..=b'9' | b'-' => Json::Null,
-            b'[' => Json::Array(ParseArray { base: self }),
-            b'{' => Json::Object(ParseObject { base: self }),
-            _ => Json::Null,
-        };
-
-        Some(j)
+        loop {
+            let b = self.next_byte()?;
+            break match next_any_item(b) {
+                Some(f) => Some(f(self)),
+                _ => continue,
+            };
+        }
     }
 }
 
@@ -60,6 +59,20 @@ impl<R: Read> Parse for Parser<R> {
     }
 }
 
+fn next_any_item(b: u8) -> Option<fn(&mut dyn Parse) -> Json<'_>> {
+    if b.is_ascii_whitespace() {
+        return None;
+    }
+
+    Some(match b {
+        b'0'..=b'9' | b'-' => |_| Json::Null,
+        b'[' => |p| Json::Array(ParseArray { base: p }),
+        b'{' => |p| Json::Object(ParseObject { base: p }),
+        b'"' => |p| Json::String(ParseString { base: p }),
+        other => panic!("unhandled {:?}", char::from(other)),
+    })
+}
+
 pub struct Number(f64);
 pub struct ParseArray<'a> {
     base: &'a mut dyn Parse,
@@ -67,16 +80,17 @@ pub struct ParseArray<'a> {
 
 impl<'a> ParseArray<'a> {
     pub fn next(&mut self) -> Option<Json> {
-        let j = loop {
-            break match self.base.next_byte()? {
-                b'"' => Json::String(ParseString { base: self.base }),
-                b',' => continue,
+        loop {
+            let b = self.base.next_byte()?;
+            match b {
                 b']' => return None,
-                other => panic!("unhandled {:?}", char::from(other)),
+                b',' => continue,
+                _ => match next_any_item(b) {
+                    Some(f) => return Some(f(self.base)),
+                    _ => continue,
+                },
             }
-        };
-
-        Some(j)
+        }
     }
 }
 
@@ -145,7 +159,10 @@ impl<'a> Iterator for Chars<'a> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        None
+        match self.base.next_byte().unwrap() {
+            b'"' => None,
+            c => Some(c.into()),
+        }
     }
 }
 

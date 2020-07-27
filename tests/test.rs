@@ -22,3 +22,18 @@ fn example() {
 
     assert_eq!(seen, &["a", "b", "c"]);
 }
+
+#[test]
+fn chars() {
+    let s = String::from(r#""abc""#);
+    let mut p = Parser::new(s.as_bytes());
+
+    let s = match p.next() {
+        Some(Json::String(s)) => s,
+        _ => panic!("expected root object to be an string"),
+    };
+
+    let chars: Vec<char> = s.read_chars().into_iter().collect();
+
+    assert_eq!(chars, &['a', 'b', 'c']);
+}
