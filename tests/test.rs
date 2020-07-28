@@ -35,3 +35,16 @@ fn chars() {
 
     assert_eq!(chars, &['a', 'b', 'c']);
 }
+
+#[test]
+fn basics() {
+    let mut p = Parser::new("null true false 0 1 -2 6.28".as_bytes());
+
+    assert!(p.next().unwrap().is_null());
+    assert_eq!(p.next().unwrap().as_bool(), Some(true));
+    assert_eq!(p.next().unwrap().as_bool(), Some(false));
+    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(0)));
+    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(1)));
+    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(-2)));
+    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(6.28)));
+}

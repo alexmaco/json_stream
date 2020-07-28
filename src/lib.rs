@@ -7,6 +7,13 @@
 //!
 //! The main use is processing JSON values that would not otherwise fit in RAM.
 //!
+//!
+//! ## General API Notes
+//!
+//! * the API is still under development, and suggestions and welcome
+//! * the [`Json`](parse::Json) enum does not implement PartialEq, since it can hold parsers that have not yielded data, so a comparison cannot be accurate
+//! * all parsers have a `fn next(&mut self) -> Option<Json>` method, but that is not part of an impl for [`Iterator`]. This may be possible in the future when generic associated types are stabilized.
+//!
 //! ## Subparsers
 //!
 //! Json values are parsed and returned as-is only for null, booleans, and numbers.
