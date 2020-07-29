@@ -11,6 +11,7 @@
 //! ## General API Notes
 //!
 //! * the API is still under development, and suggestions and welcome
+//! * lifetimes in parsers and [`Json`](parse::Json) always point back to the original [`Parser`](parse::Parser)
 //! * the [`Json`](parse::Json) enum does not implement PartialEq, since it can hold parsers that have not yielded data, so a comparison cannot be accurate
 //! * all parsers have a `fn next(&mut self) -> Option<Json>` method, but that is not part of an impl for [`Iterator`]. This may be possible in the future when generic associated types are stabilized.
 //!

@@ -15,6 +15,7 @@ A streaming JSON parser/emitter for rust.
 * sync and async support [todo]
 * `#[no_std]` support [todo]
 * optionally tolerates and recovers from errors [todo]
+* optional `serde` integration via the `serde` feature [todo]
 
 ## Examples
 
@@ -22,19 +23,17 @@ A streaming JSON parser/emitter for rust.
 let s = r#"["a", "b", "c"]"#;
 let mut p = Parser::new(s.as_bytes());
 
-let mut arr = match p.next() {
-    Some(Json::Array(seq)) => seq,
-    _ => panic!("expected root object to be an array"),
-};
+let mut json = p.next().unwrap();
+let mut arr = json
+    .as_array()
+    .expect("expected root object to be an array");
 
 let mut seen: Vec<String> = vec![];
 
 while let Some(item) = arr.next() {
-    let s = match item {
-        Json::String(s) => s,
-        _ => continue,
-    };
-    seen.push(s.read_owned());
+    if let Json::String(s) = item {
+        seen.push(s.read_owned());
+    }
 }
 
 assert_eq!(seen, &["a", "b", "c"]);
@@ -42,4 +41,4 @@ assert_eq!(seen, &["a", "b", "c"]);
 
 ## In development
 
-Still under development, API changes can happen before 1.0
+Still under development, API changes can happen before 1.0, and optimizations still need to be done

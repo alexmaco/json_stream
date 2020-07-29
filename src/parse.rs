@@ -69,7 +69,10 @@ impl<R: Read> Parse for Parser<R> {
     }
 }
 
-fn next_any_item(b: u8) -> Option<fn(&mut dyn Parse, u8) -> Json<'_>> {
+type YielfFn = for<'r> fn(&'r mut (dyn Parse + 'r), u8) -> Json<'r>;
+
+//fn next_any_item(b: u8) -> Option<for <'r> fn(&'r mut (dyn Parse + 'r), u8) -> Json<'r>> {
+fn next_any_item(b: u8) -> Option<YielfFn> {
     if b.is_ascii_whitespace() {
         return None;
     }
@@ -79,9 +82,9 @@ fn next_any_item(b: u8) -> Option<fn(&mut dyn Parse, u8) -> Json<'_>> {
         b'n' => |p, _| parse_ident(p, b"ull", Json::Null),
         b't' => |p, _| parse_ident(p, b"rue", Json::Bool(true)),
         b'f' => |p, _| parse_ident(p, b"alse", Json::Bool(false)),
-        b'[' => |p, _| Json::Array(ParseArray { base: p }),
-        b'{' => |p, _| Json::Object(ParseObject { base: p }),
-        b'"' => |p, _| Json::String(ParseString { base: p }),
+        b'[' => |p, _| Json::Array(ParseArray::new(p)),
+        b'{' => |p, _| Json::Object(ParseObject { parse: p }),
+        b'"' => |p, _| Json::String(ParseString::new(p)),
         other => panic!("unhandled {:?}", char::from(other)),
     })
 }
@@ -185,65 +188,99 @@ impl From<f32> for Number {
     }
 }
 
-// impl<I> From<I> for Number
-// where
-//     N: Into<u64>,
-// {
-//     fn from(n: N) -> Self {
-//         Number {
-//             n: NumRepr::PosInt(n.into()),
-//         }
-//     }
-// }
-
 pub struct ParseArray<'a> {
-    base: &'a mut dyn Parse,
+    parse: &'a mut dyn Parse,
+    ended: bool,
 }
 
 use std::any::type_name;
 use std::fmt::{self, Debug, Formatter};
 impl Debug for ParseString<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.base)
+        write!(
+            f,
+            "<{} for Parser@{:p}>",
+            type_name::<Self>(),
+            self.parse.as_ref().unwrap()
+        )
     }
 }
 impl Debug for ParseArray<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.base)
+        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.parse)
     }
 }
 impl Debug for ParseObject<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.base)
+        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.parse)
     }
 }
 
 impl<'a> ParseArray<'a> {
+    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+        Self {
+            parse: parse,
+            ended: false,
+        }
+    }
+
     pub fn next(&mut self) -> Option<Json> {
-        loop {
-            let b = self.base.next_byte()?;
+        while !self.ended {
+            let b = self.parse.next_byte()?;
             match b {
-                b']' => return None,
+                b']' => {
+                    self.ended = true;
+                    break;
+                }
                 b',' => continue,
                 _ => match next_any_item(b) {
-                    Some(f) => return Some(f(self.base, b)),
+                    Some(f) => return Some(f(self.parse, b)),
                     _ => continue,
                 },
             }
         }
+        None
     }
 }
 
+impl Drop for ParseArray<'_> {
+    fn drop(&mut self) {
+        if !self.ended {
+            while self.next().is_some() {}
+        }
+    }
+}
+
+fn skip_array(parse: &mut dyn Parse) {
+    todo!("implement efficient skipping")
+}
+
 pub struct ParseObject<'a> {
-    base: &'a mut dyn Parse,
+    parse: &'a mut dyn Parse,
 }
 
 impl<'a> ParseObject<'a> {
     pub fn next(&mut self) -> Option<KeyVal> {
-        Some(KeyVal { base: self.base })
+        loop {
+            let b = self.parse.peek_byte()?;
+            match b {
+                _ if b.is_ascii_whitespace() || b == b',' => {
+                    self.parse.next_byte();
+                    continue;
+                }
+                b'}' => {
+                    self.parse.next_byte();
+                    return None;
+                }
+                b'"' => {
+                    self.parse.next_byte();
+                    break;
+                }
+                _ => panic!("unhandled char '{}' in object", char::from(b)),
+            }
+        }
+        Some(KeyVal::new(self.parse))
     }
-
-    //pub fn find_key(self) -> Option<Json> { }
 }
 
 /// Reads a key and/or value pair of an object.
@@ -253,55 +290,156 @@ impl<'a> ParseObject<'a> {
 /// For example, it's possible the only read the key, and ignore the value,
 /// which will be skipped efficiently.
 pub struct KeyVal<'a> {
-    base: &'a mut dyn Parse,
+    parse: Option<&'a mut dyn Parse>,
+    key_consumed: bool,
+    val_consumed: bool,
 }
 
 impl<'a> KeyVal<'a> {
-    pub fn key(&mut self) -> ParseString {
-        ParseString { base: self.base }
+    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+        Self {
+            parse: Some(parse),
+            key_consumed: false,
+            val_consumed: false,
+        }
     }
 
-    pub fn value(&mut self) -> Json {
-        Json::Null
+    /// Obtains a [`Json`] for this object key.
+    /// Panics if called more than once.
+    pub fn key(&mut self) -> ParseString {
+        assert_eq!(self.key_consumed, false);
+        self.key_consumed = true;
+        ParseString::new(*self.parse.as_mut().unwrap())
+    }
+
+    /// Obtains a [`Json`] for this object value.
+    /// Skips and discards the key if it was not already retrieved.
+    pub fn value(mut self) -> Json<'a> {
+        self.val_consumed = true;
+        let parse = self.parse.take().unwrap();
+        let (f, b) = read_value(parse, self.key_consumed);
+        f(parse, b)
+    }
+}
+
+impl<'a> Drop for KeyVal<'a> {
+    fn drop(&mut self) {
+        if self.val_consumed {
+            return;
+        }
+        let parse = self.parse.take();
+        if let Some(parse) = parse {
+            let (f, b) = read_value(parse, self.key_consumed);
+            drop(f(parse, b))
+        }
+    }
+}
+
+fn read_value<'a>(parse: &'a mut (dyn Parse + 'a), key_consumed: bool) -> (YielfFn, u8) {
+    if !key_consumed {
+        drop(ParseString::new(parse)) // skip the key string
+    }
+
+    loop {
+        let b = parse.next_byte().unwrap();
+        match b {
+            _ if b.is_ascii_whitespace() => continue,
+            b':' => break,
+            _ => panic!("unhandled char '{}' in object", char::from(b)),
+        }
+    }
+    loop {
+        let b = parse.next_byte().unwrap();
+        if let Some(f) = next_any_item(b) {
+            return (f, b); //f(parse, b);
+        }
     }
 }
 
 /// Reads a string. Reading can be done as a whole string,
 /// or char-by-char if the string is expected to be very large.
 pub struct ParseString<'a> {
-    base: &'a mut dyn Parse,
+    parse: Option<&'a mut dyn Parse>,
 }
 
 impl<'a> ParseString<'a> {
+    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+        Self { parse: Some(parse) }
+    }
+
+    /// Parses the entire JSON string into a new [`String`]
     pub fn read_owned(self) -> String {
         let mut buf = String::new();
+        self.read_into(&mut buf);
+        buf
+    }
+
+    /// Parses the entire string into the supplied [`String`].
+    /// This is used to avoid allocating new string,
+    /// or to preallocate a buffer when the client code assumes a certain length.
+    pub fn read_into(mut self, buf: &mut String) {
+        let base = self.parse.take().unwrap();
         loop {
-            let c = self.base.next_byte().unwrap();
+            let c = base.next_byte().unwrap();
             if c == b'"' {
                 break;
             }
 
             buf.push(c.into());
         }
-        buf
     }
 
-    pub fn read_chars(self) -> Chars<'a> {
-        Chars { base: self.base }
+    /// Parses this JSON string one [`char`] at a time,
+    /// instead of the entire string.
+    pub fn read_chars(mut self) -> ParseChars<'a> {
+        ParseChars::new(self.parse.take().unwrap())
     }
 }
 
-pub struct Chars<'a> {
-    base: &'a mut dyn Parse,
+impl Drop for ParseString<'_> {
+    fn drop(&mut self) {
+        if let Some(p) = self.parse.as_mut() {
+            skip_string(*p)
+        }
+    }
 }
 
-impl<'a> Iterator for Chars<'a> {
+fn skip_string(parse: &mut dyn Parse) {
+    let mut escape = false;
+    loop {
+        let b = parse.next_byte().unwrap();
+        match b {
+            b'\\' if !escape => escape = true,
+            b'"' if !escape => return,
+            _ => escape = false,
+        }
+    }
+}
+
+pub struct ParseChars<'a> {
+    parse: &'a mut dyn Parse,
+}
+
+impl<'a> ParseChars<'a> {
+    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+        Self { parse: parse }
+    }
+}
+
+impl<'a> Iterator for ParseChars<'a> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.base.next_byte().unwrap() {
-            b'"' => None,
-            c => Some(c.into()),
+        let mut escape = false;
+        loop {
+            match self.parse.next_byte().unwrap() {
+                b'\\' if !escape => {
+                    escape = true;
+                    continue;
+                }
+                b'"' if !escape => return None,
+                c => return Some(c.into()),
+            }
         }
     }
 }
@@ -344,6 +482,34 @@ impl Json<'_> {
     pub fn as_number(&self) -> Option<Number> {
         match self {
             Self::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        match self {
+            Self::Array(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_array(&mut self) -> Option<ParseArray> {
+        match self {
+            Self::Array(a) => Some(ParseArray::new(a.parse)),
+            _ => None,
+        }
+    }
+
+    pub fn is_object(&self) -> bool {
+        match self {
+            Self::Object(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_object(&mut self) -> Option<ParseObject> {
+        match self {
+            Self::Object(o) => Some(ParseObject { parse: o.parse }),
             _ => None,
         }
     }
