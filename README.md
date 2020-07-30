@@ -23,8 +23,9 @@ A streaming JSON parser/emitter for rust.
 let s = r#"["a", "b", "c"]"#;
 let mut p = Parser::new(s.as_bytes());
 
-let mut json = p.next().unwrap();
-let mut arr = json
+let mut arr = p
+    .next()
+    .unwrap()
     .as_array()
     .expect("expected root object to be an array");
 
