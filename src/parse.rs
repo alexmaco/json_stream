@@ -456,7 +456,7 @@ pub enum Json<'a> {
     Object(ParseObject<'a>),
 }
 
-impl Json<'_> {
+impl<'a> Json<'a> {
     pub fn is_null(&self) -> bool {
         match self {
             Self::Null => true,
@@ -493,9 +493,9 @@ impl Json<'_> {
         }
     }
 
-    pub fn as_array(&mut self) -> Option<ParseArray> {
+    pub fn as_array(self) -> Option<ParseArray<'a>> {
         match self {
-            Self::Array(a) => Some(ParseArray::new(a.parse)),
+            Self::Array(a) => Some(a),
             _ => None,
         }
     }
@@ -507,9 +507,9 @@ impl Json<'_> {
         }
     }
 
-    pub fn as_object(&mut self) -> Option<ParseObject> {
+    pub fn as_object(self) -> Option<ParseObject<'a>> {
         match self {
-            Self::Object(o) => Some(ParseObject { parse: o.parse }),
+            Self::Object(o) => Some(o),
             _ => None,
         }
     }
