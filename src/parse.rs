@@ -71,7 +71,6 @@ impl<R: Read> Parse for Parser<R> {
 
 type YielfFn = for<'r> fn(&'r mut dyn Parse, u8) -> Json<'r>;
 
-//fn next_any_item(b: u8) -> Option<for <'r> fn(&'r mut (dyn Parse + 'r), u8) -> Json<'r>> {
 fn next_any_item(b: u8) -> Option<YielfFn> {
     if b.is_ascii_whitespace() {
         return None;
@@ -349,7 +348,7 @@ fn read_value<'a>(parse: &'a mut dyn Parse, key_consumed: bool) -> (YielfFn, u8)
     loop {
         let b = parse.next_byte().unwrap();
         if let Some(f) = next_any_item(b) {
-            return (f, b); //f(parse, b);
+            return (f, b);
         }
     }
 }
