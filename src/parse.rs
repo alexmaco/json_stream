@@ -69,7 +69,7 @@ impl<R: Read> Parse for Parser<R> {
     }
 }
 
-type YielfFn = for<'r> fn(&'r mut (dyn Parse + 'r), u8) -> Json<'r>;
+type YielfFn = for<'r> fn(&'r mut dyn Parse, u8) -> Json<'r>;
 
 //fn next_any_item(b: u8) -> Option<for <'r> fn(&'r mut (dyn Parse + 'r), u8) -> Json<'r>> {
 fn next_any_item(b: u8) -> Option<YielfFn> {
@@ -217,7 +217,7 @@ impl Debug for ParseObject<'_> {
 }
 
 impl<'a> ParseArray<'a> {
-    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+    fn new(parse: &'a mut dyn Parse) -> Self {
         Self {
             parse: parse,
             ended: false,
@@ -294,7 +294,7 @@ pub struct KeyVal<'a> {
 }
 
 impl<'a> KeyVal<'a> {
-    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+    fn new(parse: &'a mut dyn Parse) -> Self {
         Self {
             parse: Some(parse),
             key_consumed: false,
@@ -333,7 +333,7 @@ impl<'a> Drop for KeyVal<'a> {
     }
 }
 
-fn read_value<'a>(parse: &'a mut (dyn Parse + 'a), key_consumed: bool) -> (YielfFn, u8) {
+fn read_value<'a>(parse: &'a mut dyn Parse, key_consumed: bool) -> (YielfFn, u8) {
     if !key_consumed {
         drop(ParseString::new(parse)) // skip the key string
     }
@@ -361,7 +361,7 @@ pub struct ParseString<'a> {
 }
 
 impl<'a> ParseString<'a> {
-    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+    fn new(parse: &'a mut dyn Parse) -> Self {
         Self { parse: Some(parse) }
     }
 
@@ -419,7 +419,7 @@ pub struct ParseChars<'a> {
 }
 
 impl<'a> ParseChars<'a> {
-    fn new(parse: &'a mut (dyn Parse + 'a)) -> Self {
+    fn new(parse: &'a mut dyn Parse) -> Self {
         Self { parse: parse }
     }
 }
