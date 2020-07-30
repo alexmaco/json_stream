@@ -1,0 +1,10 @@
+error[E0499]: cannot borrow `p` as mutable more than once at a time
+  --> $DIR/parser_next_fails_while_subparser_live.rs:11:15
+   |
+6  |     let json = p.next().unwrap();
+   |                - first mutable borrow occurs here
+...
+11 |     let _j2 = p.next();
+   |               ^ second mutable borrow occurs here
+12 | }
+   | - first borrow might be used here, when `_arr` is dropped and runs the `Drop` code for type `json_stream::parse::ParseArray`

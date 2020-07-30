@@ -251,9 +251,7 @@ impl Drop for ParseArray<'_> {
     }
 }
 
-fn skip_array(parse: &mut dyn Parse) {
-    todo!("implement efficient skipping")
-}
+//fn skip_array(parse: &mut dyn Parse) { todo!("implement efficient skipping") }
 
 pub struct ParseObject<'a> {
     parse: &'a mut dyn Parse,
@@ -482,6 +480,20 @@ impl<'a> Json<'a> {
     pub fn as_number(&self) -> Option<Number> {
         match self {
             Self::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match self {
+            Self::String(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_string(self) -> Option<ParseString<'a>> {
+        match self {
+            Self::String(a) => Some(a),
             _ => None,
         }
     }

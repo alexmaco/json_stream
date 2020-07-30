@@ -4,8 +4,9 @@ use json_stream::parse::*;
 fn example() {
     let mut p = Parser::new(r#"["a","b","c"]"#.as_bytes());
 
-    let mut json = p.next().unwrap();
-    let mut arr = json
+    let mut arr = p
+        .next()
+        .unwrap()
         .as_array()
         .expect("expected root object to be an array");
 
@@ -24,10 +25,11 @@ fn example() {
 fn chars() {
     let mut p = Parser::new(r#""abc""#.as_bytes());
 
-    let s = match p.next() {
-        Some(Json::String(s)) => s,
-        _ => panic!("expected root object to be an string"),
-    };
+    let s = p
+        .next()
+        .unwrap()
+        .as_string()
+        .expect("expected root object to be an array");
 
     let chars: Vec<char> = s.read_chars().into_iter().collect();
 
@@ -39,10 +41,11 @@ fn chars() {
 fn char_escapes() {
     let mut p = Parser::new(r#""\r\"\t""#.as_bytes());
 
-    let s = match p.next() {
-        Some(Json::String(s)) => s,
-        _ => panic!("expected root object to be an string"),
-    };
+    let s = p
+        .next()
+        .unwrap()
+        .as_string()
+        .expect("expected root object to be an array");
 
     let chars: Vec<char> = s.read_chars().into_iter().collect();
 
@@ -60,6 +63,8 @@ fn basics() {
     assert_eq!(p.next().unwrap().as_number(), Some(Number::from(1)));
     assert_eq!(p.next().unwrap().as_number(), Some(Number::from(-2)));
     assert_eq!(p.next().unwrap().as_number(), Some(Number::from(6.28)));
+
+    assert!(p.next().is_none());
 }
 
 #[test]
@@ -95,4 +100,10 @@ fn object_and_keyval() {
     drop(kv);
 
     assert!(obj.next().is_none());
+}
+
+#[test]
+fn ui() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/ui/*.rs");
 }
