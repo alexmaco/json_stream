@@ -82,7 +82,7 @@ fn next_any_item(b: u8) -> Option<YielfFn> {
         b't' => |p, _| parse_ident(p, b"rue", Json::Bool(true)),
         b'f' => |p, _| parse_ident(p, b"alse", Json::Bool(false)),
         b'[' => |p, _| Json::Array(ParseArray::new(p)),
-        b'{' => |p, _| Json::Object(ParseObject { parse: p }),
+        b'{' => |p, _| Json::Object(ParseObject::new(p)),
         b'"' => |p, _| Json::String(ParseString::new(p)),
         other => panic!("unhandled {:?}", char::from(other)),
     })
@@ -211,7 +211,12 @@ impl Debug for ParseArray<'_> {
 }
 impl Debug for ParseObject<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.parse)
+        write!(
+            f,
+            "<{} for Parser@{:p}>",
+            type_name::<Self>(),
+            self.parse.as_ref().unwrap()
+        )
     }
 }
 
@@ -253,30 +258,40 @@ impl Drop for ParseArray<'_> {
 //fn skip_array(parse: &mut dyn Parse) { todo!("implement efficient skipping") }
 
 pub struct ParseObject<'a> {
-    parse: &'a mut dyn Parse,
+    parse: Option<&'a mut dyn Parse>,
 }
 
 impl<'a> ParseObject<'a> {
+    fn new(parse: &'a mut dyn Parse) -> Self {
+        Self { parse: Some(parse) }
+    }
     pub fn next(&mut self) -> Option<KeyVal> {
+        let parse: &mut dyn Parse = *self.parse.as_mut()?;
         loop {
-            let b = self.parse.peek_byte()?;
+            let b = parse.peek_byte()?;
             match b {
                 _ if b.is_ascii_whitespace() || b == b',' => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     continue;
                 }
                 b'}' => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     return None;
                 }
                 b'"' => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     break;
                 }
                 _ => panic!("unhandled char '{}' in object", char::from(b)),
             }
         }
-        Some(KeyVal::new(self.parse))
+        Some(KeyVal::new(parse))
+    }
+}
+
+impl<'a> Drop for ParseObject<'a> {
+    fn drop(&mut self) {
+        while self.next().is_some() {}
     }
 }
 
@@ -530,3 +545,24 @@ pub enum Error {
     /// an unquoted string other than "null", "true", or "false" was encountered and skipped
     InvalidIdentifier,
 }
+
+macro_rules! impl_from_item {
+    ( $(($ty:ty, $variant:ident)),* ) => {
+        $(
+            impl<'a> From<$ty> for Json<'a> {
+                #[inline]
+                fn from(x: $ty) -> Self {
+                    Self::$variant(x)
+                }
+            }
+        )*
+    };
+}
+
+impl_from_item!(
+    (bool, Bool),
+    (Number, Number),
+    (ParseString<'a>, String),
+    (ParseArray<'a>, Array),
+    (ParseObject<'a>, Object)
+);

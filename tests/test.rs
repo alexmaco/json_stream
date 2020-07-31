@@ -29,7 +29,7 @@ fn chars() {
         .next()
         .unwrap()
         .as_string()
-        .expect("expected root object to be an array");
+        .expect("expected root object to be a string");
 
     let chars: Vec<char> = s.read_chars().into_iter().collect();
 
@@ -45,7 +45,7 @@ fn char_escapes() {
         .next()
         .unwrap()
         .as_string()
-        .expect("expected root object to be an array");
+        .expect("expected root object to be a string");
 
     let chars: Vec<char> = s.read_chars().into_iter().collect();
 
@@ -73,7 +73,7 @@ fn empty_object_no_keyval() {
 
     let mut obj = match p.next() {
         Some(Json::Object(obj)) => obj,
-        _ => panic!("expected root object to be an array"),
+        _ => panic!("expected root object to be an object"),
     };
 
     assert!(obj.next().is_none());
@@ -85,7 +85,7 @@ fn object_and_keyval() {
 
     let mut obj = match p.next() {
         Some(Json::Object(obj)) => obj,
-        _ => panic!("expected root object to be an array"),
+        _ => panic!("expected root object to be an object"),
     };
 
     let mut kv = obj.next().unwrap();
@@ -106,4 +106,22 @@ fn object_and_keyval() {
 fn ui() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/*.rs");
+}
+
+#[test]
+fn object_skipping() {
+    let mut p = Parser::new(r#"{"a":{"x":2}, "b":3}"#.as_bytes());
+
+    let mut obj = p
+        .next()
+        .unwrap()
+        .as_object()
+        .expect("expected root object to be an object");
+
+    let mut kv = obj.next().unwrap();
+    assert_eq!(kv.key().read_owned(), "a");
+    drop(kv);
+
+    let kv = obj.next().unwrap();
+    assert_eq!(kv.value().as_number(), Some(Number::from(3)));
 }
