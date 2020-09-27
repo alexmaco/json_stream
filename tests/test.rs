@@ -102,6 +102,7 @@ fn object_and_keyval() {
     assert!(obj.next().is_none());
 }
 
+#[ignore]
 #[test]
 fn ui() {
     let t = trybuild::TestCases::new();
