@@ -42,4 +42,4 @@ assert_eq!(seen, &["a", "b", "c"]);
 
 ## In development
 
-Still under development, API changes can happen before 1.0, and optimizations still need to be done
+Still under development, API changes can happen before 1.0.
