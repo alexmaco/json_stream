@@ -23,6 +23,8 @@ pub struct Parser<R: Read> {
     src: Peekable<io::Bytes<R>>,
 }
 
+type JResult<'a> = std::result::Result<Json<'a>, Error>;
+
 impl<R: Read> Parser<R> {
     /// Constructs a new Parser that will read from the provided object.
     pub fn new(r: R) -> Self {
@@ -34,13 +36,12 @@ impl<R: Read> Parser<R> {
     /// Returns the next JSON item.
     /// A Parser will read any number of whitespace-separated JSON items and return them in order.
     /// Returns None when the input is exhausted.
-    pub fn next(&mut self) -> Option<Json> {
+    pub fn next(&mut self) -> Option<JResult> {
         loop {
             let b = self.next_byte()?;
-            break match next_any_item(b) {
-                Some(f) => Some(f(self, b)),
-                _ => continue,
-            };
+            if let Some(f) = next_any_item(b) {
+                break Some(Ok(f(self, b)));
+            }
         }
     }
 }
@@ -190,6 +191,7 @@ impl From<f32> for Number {
 pub struct ParseArray<'a> {
     parse: &'a mut dyn Parse,
     ended: bool,
+    needs_comma: bool,
 }
 
 use std::any::type_name;
@@ -225,22 +227,46 @@ impl<'a> ParseArray<'a> {
         Self {
             parse: parse,
             ended: false,
+            needs_comma: false,
         }
     }
 
-    pub fn next(&mut self) -> Option<Json> {
+    pub fn next(&mut self) -> Option<JResult> {
         while !self.ended {
-            let b = self.parse.next_byte()?;
+            let b = self.parse.peek_byte()?;
             match b {
                 b']' => {
+                    self.parse.next_byte();
                     self.ended = true;
                     break;
                 }
-                b',' => continue,
-                _ => match next_any_item(b) {
-                    Some(f) => return Some(f(self.parse, b)),
-                    _ => continue,
-                },
+                b',' => {
+                    self.parse.next_byte();
+                    if self.needs_comma {
+                        self.needs_comma = false;
+                        continue;
+                    } else {
+                        return Some(Err(Error::TrailingComma));
+                    }
+                }
+                _ if b.is_ascii_whitespace() => {
+                    self.parse.next_byte();
+                    continue;
+                }
+                _ => {
+                    if self.needs_comma {
+                        self.needs_comma = false;
+                        return Some(Err(Error::MissingComma));
+                    }
+                    self.parse.next_byte();
+                    match next_any_item(b) {
+                        Some(f) => {
+                            self.needs_comma = true;
+                            return Some(Ok(f(self.parse, b)));
+                        }
+                        _ => continue,
+                    }
+                }
             }
         }
         None
@@ -265,7 +291,7 @@ impl<'a> ParseObject<'a> {
     fn new(parse: &'a mut dyn Parse) -> Self {
         Self { parse: Some(parse) }
     }
-    pub fn next(&mut self) -> Option<KeyVal> {
+    pub fn next(&mut self) -> Option<Result<KeyVal, Error>> {
         let parse: &mut dyn Parse = *self.parse.as_mut()?;
         loop {
             let b = parse.peek_byte()?;
@@ -285,7 +311,7 @@ impl<'a> ParseObject<'a> {
                 _ => panic!("unhandled char '{}' in object", char::from(b)),
             }
         }
-        Some(KeyVal::new(parse))
+        Some(Ok(KeyVal::new(parse)))
     }
 }
 
@@ -347,7 +373,7 @@ impl<'a> Drop for KeyVal<'a> {
     }
 }
 
-fn read_value<'a>(parse: &'a mut dyn Parse, key_consumed: bool) -> (YielfFn, u8) {
+fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> (YielfFn, u8) {
     if !key_consumed {
         drop(ParseString::new(parse)) // skip the key string
     }
@@ -468,72 +494,89 @@ pub enum Json<'a> {
     Object(ParseObject<'a>),
 }
 
-impl<'a> Json<'a> {
-    pub fn is_null(&self) -> bool {
+mod private {
+    pub trait Sealed {}
+}
+
+pub trait JsonAccess<'a>: private::Sealed {
+    #[inline]
+    fn is_null(&self) -> bool {
+        self.as_null().is_some()
+    }
+    #[inline]
+    fn is_bool(&self) -> bool {
+        self.as_bool().is_some()
+    }
+    #[inline]
+    fn is_number(&self) -> bool {
+        self.as_number().is_some()
+    }
+
+    fn is_string(&self) -> bool;
+    fn is_array(&self) -> bool;
+    fn is_object(&self) -> bool;
+
+    fn as_null(&self) -> Option<()>;
+    fn as_bool(&self) -> Option<bool>;
+    fn as_number(&self) -> Option<Number>;
+    fn as_string(self) -> Option<ParseString<'a>>;
+    fn as_array(self) -> Option<ParseArray<'a>>;
+    fn as_object(self) -> Option<ParseObject<'a>>;
+}
+
+impl private::Sealed for Json<'_> {}
+impl<'a> JsonAccess<'a> for Json<'a> {
+    fn as_null(&self) -> Option<()> {
         match self {
-            Self::Null => true,
-            _ => false,
+            Self::Null => Some(()),
+            _ => None,
         }
     }
 
-    pub fn is_bool(&self) -> bool {
-        self.as_bool().is_some()
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
+    fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(b) => Some(*b),
             _ => None,
         }
     }
 
-    pub fn is_number(&self) -> bool {
-        self.as_number().is_some()
-    }
-
-    pub fn as_number(&self) -> Option<Number> {
+    fn as_number(&self) -> Option<Number> {
         match self {
             Self::Number(n) => Some(*n),
             _ => None,
         }
     }
 
-    pub fn is_string(&self) -> bool {
-        match self {
-            Self::String(_) => true,
-            _ => false,
-        }
+    #[inline]
+    fn is_string(&self) -> bool {
+        matches!(self, Self::String(_))
     }
 
-    pub fn as_string(self) -> Option<ParseString<'a>> {
+    fn as_string(self) -> Option<ParseString<'a>> {
         match self {
             Self::String(a) => Some(a),
             _ => None,
         }
     }
 
-    pub fn is_array(&self) -> bool {
-        match self {
-            Self::Array(_) => true,
-            _ => false,
-        }
+    #[inline]
+    fn is_array(&self) -> bool {
+        matches!(self, Self::Array(_))
     }
 
-    pub fn as_array(self) -> Option<ParseArray<'a>> {
+    fn as_array(self) -> Option<ParseArray<'a>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
         }
     }
 
-    pub fn is_object(&self) -> bool {
-        match self {
-            Self::Object(_) => true,
-            _ => false,
-        }
+    #[inline]
+    fn is_object(&self) -> bool {
+        matches!(self, Self::Object(_))
     }
 
-    pub fn as_object(self) -> Option<ParseObject<'a>> {
+    fn as_object(self) -> Option<ParseObject<'a>> {
         match self {
             Self::Object(o) => Some(o),
             _ => None,
@@ -541,9 +584,67 @@ impl<'a> Json<'a> {
     }
 }
 
+impl private::Sealed for JResult<'_> {}
+impl<'a> JsonAccess<'a> for JResult<'a> {
+    fn as_null(&self) -> Option<()> {
+        self.as_ref().ok()?.as_null()
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        self.as_ref().ok()?.as_bool()
+    }
+
+    fn as_number(&self) -> Option<Number> {
+        self.as_ref().ok()?.as_number()
+    }
+
+    #[inline]
+    fn is_string(&self) -> bool {
+        match self {
+            Ok(j) => j.is_string(),
+            _ => false,
+        }
+    }
+
+    fn as_string(self) -> Option<ParseString<'a>> {
+        self.ok().and_then(Json::as_string)
+    }
+
+    #[inline]
+    fn is_array(&self) -> bool {
+        match self {
+            Ok(j) => j.is_array(),
+            _ => false,
+        }
+    }
+
+    fn as_array(self) -> Option<ParseArray<'a>> {
+        self.ok().and_then(Json::as_array)
+    }
+
+    #[inline]
+    fn is_object(&self) -> bool {
+        match self {
+            Ok(j) => j.is_object(),
+            _ => false,
+        }
+    }
+
+    fn as_object(self) -> Option<ParseObject<'a>> {
+        self.ok().and_then(Json::as_object)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// an unquoted string other than "null", "true", or "false" was encountered and skipped
     InvalidIdentifier,
+
+    /// a character other than a collection close was encountered while looking for the next item
+    MissingComma,
+
+    /// an item was expected, but was not encountered after a comma
+    TrailingComma,
 }
 
 macro_rules! impl_from_item {
