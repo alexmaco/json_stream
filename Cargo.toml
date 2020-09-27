@@ -7,4 +7,4 @@ edition = "2018"
 [dependencies]
 
 [dev-dependencies]
-trybuild = "1.0.30"
+trybuild = "1.0.35"
