@@ -246,7 +246,7 @@ impl<'a> ParseArray<'a> {
                         self.needs_comma = false;
                         continue;
                     } else {
-                        return Some(Err(Error::TrailingComma));
+                        return Some(Err(SyntaxError::TrailingComma.into()));
                     }
                 }
                 _ if b.is_ascii_whitespace() => {
@@ -256,7 +256,7 @@ impl<'a> ParseArray<'a> {
                 _ => {
                     if self.needs_comma {
                         self.needs_comma = false;
-                        return Some(Err(Error::MissingComma));
+                        return Some(Err(SyntaxError::MissingComma.into()));
                     }
                     self.parse.next_byte();
                     match next_any_item(b) {
@@ -635,16 +635,108 @@ impl<'a> JsonAccess<'a> for JResult<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum Error {
-    /// an unquoted string other than "null", "true", or "false" was encountered and skipped
+#[derive(Debug)]
+pub struct Error {
+    err: Box<ErrorCode>,
+}
+
+impl Error {
+    pub fn syntax(&self) -> Option<SyntaxError> {
+        match *self.err {
+            ErrorCode::Syntax(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+impl From<SyntaxError> for Error {
+    fn from(e: SyntaxError) -> Self {
+        Self {
+            err: Box::new(ErrorCode::Syntax(e)),
+        }
+    }
+}
+
+// Modeled after serde_json
+#[derive(Debug)]
+pub(crate) enum ErrorCode {
+    /// Catchall for syntax error messages
+    Message(Box<str>),
+
+    Io(io::Error),
+
+    Syntax(SyntaxError),
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[non_exhaustive]
+#[allow(dead_code)]
+pub enum SyntaxError {
+    /// An unquoted string other than "null", "true", or "false" was encountered and skipped
     InvalidIdentifier,
 
-    /// a character other than a collection close was encountered while looking for the next item
+    /// A character other than a collection close was encountered while looking for the next item
     MissingComma,
 
-    /// an item was expected, but was not encountered after a comma
+    /// EOF while parsing a list.
+    EofWhileParsingList,
+
+    /// EOF while parsing an object.
+    EofWhileParsingObject,
+
+    /// EOF while parsing a string.
+    EofWhileParsingString,
+
+    /// EOF while parsing a JSON value.
+    EofWhileParsingValue,
+
+    /// Expected this character to be a `':'`.
+    ExpectedColon,
+
+    /// Expected this character to be either a `','` or a `']'`.
+    // ExpectedListCommaOrEnd,
+
+    /// Expected this character to be either a `','` or a `'}'`.
+    // ExpectedObjectCommaOrEnd,
+
+    /// Expected to parse either a `true`, `false`, or a `null`.
+    // ExpectedSomeIdent,
+
+    /// Expected this character to start a JSON value.
+    // ExpectedSomeValue,
+
+    /// Invalid hex escape code.
+    InvalidEscape,
+
+    /// Invalid number.
+    InvalidNumber,
+
+    /// Number is bigger than the maximum value of its type.
+    NumberOutOfRange,
+
+    /// Invalid unicode code point.
+    InvalidUnicodeCodePoint,
+
+    /// Control character found while parsing a string.
+    ControlCharacterWhileParsingString,
+
+    /// Object key is not a string.
+    KeyMustBeAString,
+
+    /// Lone leading surrogate in hex escape.
+    LoneLeadingSurrogateInHexEscape,
+
+    /// JSON has a comma after the last value in an array or map.
     TrailingComma,
+
+    /// JSON has non-whitespace trailing characters after the value.
+    TrailingCharacters,
+
+    /// Unexpected end of hex excape.
+    UnexpectedEndOfHexEscape,
+
+    /// Encountered nesting of JSON maps and arrays more than 128 layers deep.
+    RecursionLimitExceeded,
 }
 
 macro_rules! impl_from_item {

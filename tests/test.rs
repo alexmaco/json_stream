@@ -138,7 +138,10 @@ fn missing_comma_error() {
         .expect("expected root object to be an array");
 
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
-    assert_eq!(arr.next().unwrap().unwrap_err(), Error::MissingComma);
+    assert_eq!(
+        arr.next().unwrap().unwrap_err().syntax(),
+        Some(SyntaxError::MissingComma)
+    );
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(2)));
 }
 
@@ -153,7 +156,13 @@ fn trailing_comma_error() {
         .expect("expected root object to be an array");
 
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
-    assert_eq!(arr.next().unwrap().unwrap_err(), Error::TrailingComma);
-    assert_eq!(arr.next().unwrap().unwrap_err(), Error::TrailingComma);
+    assert_eq!(
+        arr.next().unwrap().unwrap_err().syntax(),
+        Some(SyntaxError::TrailingComma)
+    );
+    assert_eq!(
+        arr.next().unwrap().unwrap_err().syntax(),
+        Some(SyntaxError::TrailingComma)
+    );
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(2)));
 }
