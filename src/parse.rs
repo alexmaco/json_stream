@@ -21,6 +21,7 @@ use std::iter::Peekable;
 /// Reads bytes from a [`Read`], parses them as [`Json`], and returns a stream of values or sub-parsers via `fn next()`
 pub struct Parser<R: Read> {
     src: Peekable<io::Bytes<R>>,
+    skips: Vec<Skip>,
 }
 
 type JResult<'a> = std::result::Result<Json<'a>, Error>;
@@ -30,6 +31,7 @@ impl<R: Read> Parser<R> {
     pub fn new(r: R) -> Self {
         Self {
             src: r.bytes().peekable(),
+            skips: vec![],
         }
     }
 
@@ -37,12 +39,9 @@ impl<R: Read> Parser<R> {
     /// A Parser will read any number of whitespace-separated JSON items and return them in order.
     /// Returns None when the input is exhausted.
     pub fn next(&mut self) -> Option<JResult> {
-        loop {
-            let b = self.next_byte()?;
-            if let Some(f) = next_any_item(b) {
-                break Some(f(self, b));
-            }
-        }
+        self.do_skips();
+        self.eat_whitespace();
+        Some(next_any_item(self.next_byte()?, self))
     }
 }
 
@@ -52,6 +51,17 @@ trait Parse {
     fn next_byte(&mut self) -> Option<u8>;
     fn peek_byte(&mut self) -> Option<u8>;
     fn eat_until_whitespace(&mut self);
+    fn eat_whitespace(&mut self);
+    fn add_skip(&mut self, s: Skip);
+    fn do_skips(&mut self);
+}
+
+#[derive(Debug, Copy, Clone)]
+enum Skip {
+    Array,
+    Object,
+    ObjectValue { key_consumed: bool },
+    String,
 }
 
 impl<R: Read> Parse for Parser<R> {
@@ -81,29 +91,53 @@ impl<R: Read> Parse for Parser<R> {
             }
         }
     }
+    fn eat_whitespace(&mut self) {
+        loop {
+            match self.peek_byte() {
+                None => break,
+                Some(b) => {
+                    if !b.is_ascii_whitespace() {
+                        break;
+                    }
+                    self.next_byte();
+                }
+            }
+        }
+    }
+    fn add_skip(&mut self, s: Skip) {
+        self.skips.push(s);
+    }
+    fn do_skips(&mut self) {
+        if self.skips.is_empty() {
+            return;
+        }
+        let skips = std::mem::replace(&mut self.skips, vec![]);
+        for skip in skips {
+            match skip {
+                Skip::String => skip_string(self),
+                Skip::Array => skip_array(self),
+                Skip::Object => skip_obj(self),
+                Skip::ObjectValue { key_consumed } => skip_obj_value(self, key_consumed),
+            }
+        }
+    }
 }
 
-type YielfFn = for<'r> fn(&'r mut dyn Parse, u8) -> JResult<'r>;
-
-fn next_any_item(b: u8) -> Option<YielfFn> {
-    if b.is_ascii_whitespace() {
-        return None;
-    }
-
-    Some(match b {
-        b'0'..=b'9' | b'-' => |p, b| Ok(parse_number(p, b)),
-        b'n' => |p, _| parse_ident(p, b"ull", Json::Null),
-        b't' => |p, _| parse_ident(p, b"rue", Json::Bool(true)),
-        b'f' => |p, _| parse_ident(p, b"alse", Json::Bool(false)),
-        b'[' => |p, _| Ok(Json::Array(ParseArray::new(p))),
-        b'{' => |p, _| Ok(Json::Object(ParseObject::new(p))),
-        b'"' => |p, _| Ok(Json::String(ParseString::new(p))),
-        b if b.is_ascii_alphabetic() => |p, _| {
-            p.eat_until_whitespace();
+fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> JResult<'a> {
+    match b {
+        b'0'..=b'9' | b'-' => Ok(parse_number(parse, b)),
+        b'n' => parse_ident(parse, b"ull", Json::Null),
+        b't' => parse_ident(parse, b"rue", Json::Bool(true)),
+        b'f' => parse_ident(parse, b"alse", Json::Bool(false)),
+        b'[' => Ok(Json::Array(ParseArray::new(parse))),
+        b'{' => Ok(Json::Object(ParseObject::new(parse))),
+        b'"' => Ok(Json::String(ParseString::new(parse))),
+        b if b.is_ascii_alphabetic() => {
+            parse.eat_until_whitespace();
             Err(SyntaxError::InvalidIdentifier.into())
-        },
+        }
         other => panic!("unhandled {:?}", char::from(other)),
-    })
+    }
 }
 
 fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> JResult<'a> {
@@ -213,7 +247,7 @@ impl From<f32> for Number {
 }
 
 pub struct ParseArray<'a> {
-    parse: &'a mut dyn Parse,
+    parse: Option<&'a mut dyn Parse>,
     ended: bool,
     needs_comma: bool,
 }
@@ -232,7 +266,12 @@ impl Debug for ParseString<'_> {
 }
 impl Debug for ParseArray<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} for Parser@{:p}>", type_name::<Self>(), self.parse)
+        write!(
+            f,
+            "<{} for Parser@{:p}>",
+            type_name::<Self>(),
+            self.parse.as_ref().unwrap()
+        )
     }
 }
 impl Debug for ParseObject<'_> {
@@ -249,23 +288,28 @@ impl Debug for ParseObject<'_> {
 impl<'a> ParseArray<'a> {
     fn new(parse: &'a mut dyn Parse) -> Self {
         Self {
-            parse: parse,
+            parse: Some(parse),
             ended: false,
             needs_comma: false,
         }
     }
 
-    pub fn next(&mut self) -> Option<JResult> {
-        while !self.ended {
-            let b = self.parse.peek_byte()?;
+    pub fn next<'b>(&'b mut self) -> Option<JResult<'b>> {
+        if self.ended {
+            return None;
+        }
+        let parse: &'b mut (dyn Parse + 'a) = *self.parse.as_mut().unwrap();
+        parse.do_skips();
+        loop {
+            let b = parse.peek_byte()?;
             match b {
                 b']' => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     self.ended = true;
-                    break;
+                    return None;
                 }
                 b',' => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     if self.needs_comma {
                         self.needs_comma = false;
                         continue;
@@ -274,7 +318,7 @@ impl<'a> ParseArray<'a> {
                     }
                 }
                 _ if b.is_ascii_whitespace() => {
-                    self.parse.next_byte();
+                    parse.next_byte();
                     continue;
                 }
                 _ => {
@@ -282,41 +326,46 @@ impl<'a> ParseArray<'a> {
                         self.needs_comma = false;
                         return Some(Err(SyntaxError::MissingComma.into()));
                     }
-                    self.parse.next_byte();
-                    match next_any_item(b) {
-                        Some(f) => {
-                            self.needs_comma = true;
-                            return Some(f(self.parse, b));
-                        }
-                        _ => continue,
-                    }
+                    parse.next_byte();
+                    self.needs_comma = true;
+                    return Some(next_any_item(b, parse));
                 }
             }
         }
-        None
     }
 }
 
 impl Drop for ParseArray<'_> {
     fn drop(&mut self) {
         if !self.ended {
-            while self.next().is_some() {}
+            self.parse.as_mut().unwrap().add_skip(Skip::Array);
         }
     }
 }
 
-//fn skip_array(parse: &mut dyn Parse) { todo!("implement efficient skipping") }
+fn skip_array(parse: &mut dyn Parse) {
+    let mut arr = ParseArray::new(parse);
+    while arr.next().is_some() {}
+}
 
 pub struct ParseObject<'a> {
     parse: Option<&'a mut dyn Parse>,
+    ended: bool,
 }
 
 impl<'a> ParseObject<'a> {
     fn new(parse: &'a mut dyn Parse) -> Self {
-        Self { parse: Some(parse) }
+        Self {
+            parse: Some(parse),
+            ended: false,
+        }
     }
     pub fn next(&mut self) -> Option<Result<KeyVal, Error>> {
+        if self.ended {
+            return None;
+        }
         let parse: &mut dyn Parse = *self.parse.as_mut()?;
+        parse.do_skips();
         loop {
             let b = parse.peek_byte()?;
             match b {
@@ -326,6 +375,7 @@ impl<'a> ParseObject<'a> {
                 }
                 b'}' => {
                     parse.next_byte();
+                    self.ended = true;
                     return None;
                 }
                 b'"' => {
@@ -341,8 +391,15 @@ impl<'a> ParseObject<'a> {
 
 impl<'a> Drop for ParseObject<'a> {
     fn drop(&mut self) {
-        while self.next().is_some() {}
+        if !self.ended {
+            self.parse.as_mut().unwrap().add_skip(Skip::Object);
+        }
     }
+}
+
+fn skip_obj(parse: &mut dyn Parse) {
+    let mut obj = ParseObject::new(parse);
+    while obj.next().is_some() {}
 }
 
 /// Reads a key and/or value pair of an object.
@@ -366,7 +423,7 @@ impl<'a> KeyVal<'a> {
         }
     }
 
-    /// Obtains a [`Json`] for this object key.
+    /// Begins parsing the current object key.
     /// Panics if called more than once.
     pub fn key(&mut self) -> ParseString {
         assert_eq!(self.key_consumed, false);
@@ -379,43 +436,46 @@ impl<'a> KeyVal<'a> {
     pub fn value(mut self) -> JResult<'a> {
         self.val_consumed = true;
         let parse = self.parse.take().unwrap();
-        let (f, b) = read_value(parse, self.key_consumed);
-        f(parse, b)
+        read_value(parse, self.key_consumed)
     }
 }
 
 impl<'a> Drop for KeyVal<'a> {
     fn drop(&mut self) {
-        if self.val_consumed {
-            return;
-        }
-        let parse = self.parse.take();
-        if let Some(parse) = parse {
-            let (f, b) = read_value(parse, self.key_consumed);
-            drop(f(parse, b))
+        if !self.val_consumed {
+            self.parse.as_mut().unwrap().add_skip(Skip::ObjectValue {
+                key_consumed: self.key_consumed,
+            });
         }
     }
 }
 
-fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> (YielfFn, u8) {
+fn skip_obj_value(parse: &mut dyn Parse, key_consumed: bool) {
+    let v = loop {
+        if let Ok(v) = read_value(parse, key_consumed) {
+            break v;
+        }
+    };
+    match v {
+        Json::String(mut p) => {
+            skip_string(*p.parse.as_mut().unwrap());
+        }
+        Json::Array(mut p) => while p.next().is_some() {},
+        Json::Object(mut p) => while p.next().is_some() {},
+        _ => {}
+    }
+}
+
+fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> JResult {
     if !key_consumed {
-        drop(ParseString::new(parse)) // skip the key string
+        skip_string(parse);
     }
 
-    loop {
-        let b = parse.next_byte().unwrap();
-        match b {
-            _ if b.is_ascii_whitespace() => continue,
-            b':' => break,
-            _ => panic!("unhandled char '{}' in object", char::from(b)),
-        }
-    }
-    loop {
-        let b = parse.next_byte().unwrap();
-        if let Some(f) = next_any_item(b) {
-            return (f, b);
-        }
-    }
+    parse.eat_whitespace();
+    assert_eq!(parse.next_byte(), Some(b':'));
+    parse.eat_whitespace();
+
+    next_any_item(parse.next_byte().unwrap(), parse)
 }
 
 /// Reads a string. Reading can be done as a whole string,
@@ -461,7 +521,7 @@ impl<'a> ParseString<'a> {
 impl Drop for ParseString<'_> {
     fn drop(&mut self) {
         if let Some(p) = self.parse.as_mut() {
-            skip_string(*p)
+            p.add_skip(Skip::String);
         }
     }
 }
@@ -668,7 +728,7 @@ impl Error {
     pub fn syntax(&self) -> Option<SyntaxError> {
         match *self.err {
             ErrorCode::Syntax(s) => Some(s),
-            _ => None,
+            // _ => None,
         }
     }
 }
@@ -685,10 +745,9 @@ impl From<SyntaxError> for Error {
 #[derive(Debug)]
 pub(crate) enum ErrorCode {
     /// Catchall for syntax error messages
-    Message(Box<str>),
+    // Message(Box<str>),
 
-    Io(io::Error),
-
+    // Io(io::Error),
     Syntax(SyntaxError),
 }
 
