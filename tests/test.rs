@@ -166,3 +166,26 @@ fn trailing_comma_error() {
     );
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(2)));
 }
+
+mod identifier_errors {
+    use super::*;
+
+    #[test]
+    fn eof() {
+        let mut p = Parser::new("nul".as_bytes());
+        assert_eq!(
+            p.next().unwrap().unwrap_err().syntax(),
+            Some(SyntaxError::EofWhileParsingValue)
+        );
+    }
+
+    #[test]
+    fn invalid_ident() {
+        let mut p = Parser::new("trxu false".as_bytes());
+        assert_eq!(
+            p.next().unwrap().unwrap_err().syntax(),
+            Some(SyntaxError::InvalidIdentifier)
+        );
+        assert_eq!(p.next().unwrap().as_bool(), Some(false));
+    }
+}

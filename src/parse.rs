@@ -40,7 +40,7 @@ impl<R: Read> Parser<R> {
         loop {
             let b = self.next_byte()?;
             if let Some(f) = next_any_item(b) {
-                break Some(Ok(f(self, b)));
+                break Some(f(self, b));
             }
         }
     }
@@ -51,6 +51,7 @@ impl<R: Read> Parser<R> {
 trait Parse {
     fn next_byte(&mut self) -> Option<u8>;
     fn peek_byte(&mut self) -> Option<u8>;
+    fn eat_until_whitespace(&mut self);
 }
 
 impl<R: Read> Parse for Parser<R> {
@@ -68,9 +69,21 @@ impl<R: Read> Parse for Parser<R> {
             Err(e) => panic!("error reading: {:?}", e),
         }
     }
+    fn eat_until_whitespace(&mut self) {
+        loop {
+            match self.next_byte() {
+                None => break,
+                Some(b) => {
+                    if b.is_ascii_whitespace() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
-type YielfFn = for<'r> fn(&'r mut dyn Parse, u8) -> Json<'r>;
+type YielfFn = for<'r> fn(&'r mut dyn Parse, u8) -> JResult<'r>;
 
 fn next_any_item(b: u8) -> Option<YielfFn> {
     if b.is_ascii_whitespace() {
@@ -78,22 +91,29 @@ fn next_any_item(b: u8) -> Option<YielfFn> {
     }
 
     Some(match b {
-        b'0'..=b'9' | b'-' => |p, b| parse_number(p, b),
+        b'0'..=b'9' | b'-' => |p, b| Ok(parse_number(p, b)),
         b'n' => |p, _| parse_ident(p, b"ull", Json::Null),
         b't' => |p, _| parse_ident(p, b"rue", Json::Bool(true)),
         b'f' => |p, _| parse_ident(p, b"alse", Json::Bool(false)),
-        b'[' => |p, _| Json::Array(ParseArray::new(p)),
-        b'{' => |p, _| Json::Object(ParseObject::new(p)),
-        b'"' => |p, _| Json::String(ParseString::new(p)),
+        b'[' => |p, _| Ok(Json::Array(ParseArray::new(p))),
+        b'{' => |p, _| Ok(Json::Object(ParseObject::new(p))),
+        b'"' => |p, _| Ok(Json::String(ParseString::new(p))),
         other => panic!("unhandled {:?}", char::from(other)),
     })
 }
 
-fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> Json<'a> {
+fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> JResult<'a> {
     for b in ident {
-        assert_eq!(Some(*b), parse.next_byte());
+        let read = match parse.next_byte() {
+            Some(b) => b,
+            _ => return Err(SyntaxError::EofWhileParsingValue.into()),
+        };
+        if *b != read {
+            parse.eat_until_whitespace();
+            return Err(SyntaxError::InvalidIdentifier.into());
+        }
     }
-    res
+    Ok(res)
 }
 
 fn parse_number(parse: &mut dyn Parse, byte: u8) -> Json {
@@ -262,7 +282,7 @@ impl<'a> ParseArray<'a> {
                     match next_any_item(b) {
                         Some(f) => {
                             self.needs_comma = true;
-                            return Some(Ok(f(self.parse, b)));
+                            return Some(f(self.parse, b));
                         }
                         _ => continue,
                     }
@@ -352,7 +372,7 @@ impl<'a> KeyVal<'a> {
 
     /// Obtains a [`Json`] for this object value.
     /// Skips and discards the key if it was not already retrieved.
-    pub fn value(mut self) -> Json<'a> {
+    pub fn value(mut self) -> JResult<'a> {
         self.val_consumed = true;
         let parse = self.parse.take().unwrap();
         let (f, b) = read_value(parse, self.key_consumed);
