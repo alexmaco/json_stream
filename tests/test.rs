@@ -188,4 +188,14 @@ mod identifier_errors {
         );
         assert_eq!(p.next().unwrap().as_bool(), Some(false));
     }
+
+    #[test]
+    fn unknown_ident() {
+        let mut p = Parser::new("potato false".as_bytes());
+        assert_eq!(
+            p.next().unwrap().unwrap_err().syntax(),
+            Some(SyntaxError::InvalidIdentifier)
+        );
+        assert_eq!(p.next().unwrap().as_bool(), Some(false));
+    }
 }

@@ -98,6 +98,10 @@ fn next_any_item(b: u8) -> Option<YielfFn> {
         b'[' => |p, _| Ok(Json::Array(ParseArray::new(p))),
         b'{' => |p, _| Ok(Json::Object(ParseObject::new(p))),
         b'"' => |p, _| Ok(Json::String(ParseString::new(p))),
+        b if b.is_ascii_alphabetic() => |p, _| {
+            p.eat_until_whitespace();
+            Err(SyntaxError::InvalidIdentifier.into())
+        },
         other => panic!("unhandled {:?}", char::from(other)),
     })
 }
