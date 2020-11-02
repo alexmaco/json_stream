@@ -39,4 +39,5 @@
 //! Enable the `serde_json` feature to expose `Serialize`/`Deserializer` implementations that allow
 //!
 //!
+pub mod emit;
 pub mod parse;

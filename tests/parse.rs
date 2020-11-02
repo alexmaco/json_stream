@@ -103,12 +103,6 @@ fn object_and_keyval() {
 }
 
 #[test]
-fn ui() {
-    let t = trybuild::TestCases::new();
-    t.compile_fail("tests/ui/*.rs");
-}
-
-#[test]
 fn object_skipping() {
     let mut p = Parser::new(r#"{"a":{"x":2}, "b":3}"#.as_bytes());
 
