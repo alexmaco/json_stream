@@ -125,7 +125,7 @@ impl<R: Read> Parse for Parser<R> {
 
 fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> JResult<'a> {
     match b {
-        b'0'..=b'9' | b'-' => Ok(parse_number(parse, b)),
+        b'0'..=b'9' | b'-' => parse_number(parse, b),
         b'n' => parse_ident(parse, b"ull", Json::Null),
         b't' => parse_ident(parse, b"rue", Json::Bool(true)),
         b'f' => parse_ident(parse, b"alse", Json::Bool(false)),
@@ -154,7 +154,7 @@ fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> JResul
     Ok(res)
 }
 
-fn parse_number(parse: &mut dyn Parse, byte: u8) -> Json {
+fn parse_number(parse: &mut dyn Parse, byte: u8) -> JResult {
     let mut s = String::new();
     s.push(byte.into());
     while let Some(b) = parse.peek_byte() {
@@ -168,15 +168,15 @@ fn parse_number(parse: &mut dyn Parse, byte: u8) -> Json {
     }
 
     if let Ok(n) = s.parse::<u64>() {
-        return Json::Number(Number::from(n));
+        return Ok(Json::Number(Number::from(n)));
     }
 
     if let Ok(n) = s.parse::<i64>() {
-        return Json::Number(Number::from(n));
+        return Ok(Json::Number(Number::from(n)));
     }
 
     let n = s.parse::<f64>().unwrap();
-    Json::Number(Number::from(n))
+    Ok(Json::Number(Number::from(n)))
 }
 
 /// Represents a JSON number (integer or float)
@@ -409,9 +409,9 @@ fn skip_obj(parse: &mut dyn Parse) {
 /// For example, it's possible the only read the key, and ignore the value,
 /// which will be skipped efficiently.
 pub struct KeyVal<'a> {
+    // None here means the object is exhausted
     parse: Option<&'a mut dyn Parse>,
     key_consumed: bool,
-    val_consumed: bool,
 }
 
 impl<'a> KeyVal<'a> {
@@ -419,7 +419,6 @@ impl<'a> KeyVal<'a> {
         Self {
             parse: Some(parse),
             key_consumed: false,
-            val_consumed: false,
         }
     }
 
@@ -434,7 +433,6 @@ impl<'a> KeyVal<'a> {
     /// Obtains a [`Json`] for this object value.
     /// Skips and discards the key if it was not already retrieved.
     pub fn value(mut self) -> JResult<'a> {
-        self.val_consumed = true;
         let parse = self.parse.take().unwrap();
         read_value(parse, self.key_consumed)
     }
@@ -442,8 +440,8 @@ impl<'a> KeyVal<'a> {
 
 impl<'a> Drop for KeyVal<'a> {
     fn drop(&mut self) {
-        if !self.val_consumed {
-            self.parse.as_mut().unwrap().add_skip(Skip::ObjectValue {
+        if let Some(parse) = self.parse.as_mut() {
+            parse.add_skip(Skip::ObjectValue {
                 key_consumed: self.key_consumed,
             });
         }
@@ -458,7 +456,7 @@ fn skip_obj_value(parse: &mut dyn Parse, key_consumed: bool) {
     };
     match v {
         Json::String(mut p) => {
-            skip_string(*p.parse.as_mut().unwrap());
+            p.skip();
         }
         Json::Array(mut p) => while p.next().is_some() {},
         Json::Object(mut p) => while p.next().is_some() {},
@@ -475,7 +473,11 @@ fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> JResult {
     assert_eq!(parse.next_byte(), Some(b':'));
     parse.eat_whitespace();
 
-    next_any_item(parse.next_byte().unwrap(), parse)
+    let b = match parse.next_byte() {
+        Some(b) => b,
+        _ => return Err(SyntaxError::EofWhileParsingValue.into()),
+    };
+    next_any_item(b, parse)
 }
 
 /// Reads a string. Reading can be done as a whole string,
@@ -492,22 +494,21 @@ impl<'a> ParseString<'a> {
     /// Parses the entire JSON string into a new [`String`]
     pub fn read_owned(self) -> String {
         let mut buf = String::new();
-        self.read_into(&mut buf);
+        self.read_into(&mut buf).unwrap();
         buf
     }
 
     /// Parses the entire string into the supplied [`String`].
-    /// This is used to avoid allocating new string,
-    /// or to preallocate a buffer when the client code assumes a certain length.
-    pub fn read_into(mut self, buf: &mut String) {
-        let base = self.parse.take().unwrap();
+    /// This is useful to avoid allocating a new String,
+    /// or to preallocate a buffer when the client code can guess the string length.
+    pub fn read_into(mut self, buf: &mut String) -> Result<(), Error> {
+        let parse = self.parse.take().unwrap();
         loop {
-            let c = base.next_byte().unwrap();
-            if c == b'"' {
-                break;
+            match parse.next_byte() {
+                None => break Err(SyntaxError::EofWhileParsingString.into()),
+                Some(b'"') => break Ok(()),
+                Some(c) => buf.push(c.into()),
             }
-
-            buf.push(c.into());
         }
     }
 
@@ -515,6 +516,10 @@ impl<'a> ParseString<'a> {
     /// instead of the entire string.
     pub fn read_chars(mut self) -> ParseChars<'a> {
         ParseChars::new(self.parse.take().unwrap())
+    }
+
+    fn skip(&mut self) {
+        skip_string(*self.parse.as_mut().unwrap());
     }
 }
 
@@ -528,8 +533,7 @@ impl Drop for ParseString<'_> {
 
 fn skip_string(parse: &mut dyn Parse) {
     let mut escape = false;
-    loop {
-        let b = parse.next_byte().unwrap();
+    while let Some(b) = parse.next_byte() {
         match b {
             b'\\' if !escape => escape = true,
             b'"' if !escape => return,
@@ -554,7 +558,7 @@ impl<'a> Iterator for ParseChars<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut escape = false;
         loop {
-            match self.parse.next_byte().unwrap() {
+            match self.parse.next_byte()? {
                 b'\\' if !escape => {
                     escape = true;
                     continue;
