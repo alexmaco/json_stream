@@ -1,3 +1,8 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::BinaryHeap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::LinkedList;
 use std::collections::VecDeque;
 use std::io::Write;
@@ -216,3 +221,27 @@ impl_json_emit_for_generic_seq!([T]);
 impl_json_emit_for_generic_seq!(Vec<T>);
 impl_json_emit_for_generic_seq!(VecDeque<T>);
 impl_json_emit_for_generic_seq!(LinkedList<T>);
+impl_json_emit_for_generic_seq!(HashSet<T>);
+impl_json_emit_for_generic_seq!(BTreeSet<T>);
+impl_json_emit_for_generic_seq!(BinaryHeap<T>);
+
+macro_rules! impl_json_emit_for_generic_map {
+    ( $ty:ty ) => {
+        impl<K, V> private::Sealed for $ty {}
+        impl<K, V> JsonEmit for $ty
+        where
+            K: AsRef<str>,
+            V: JsonEmit,
+        {
+            fn write_to(&self, emit: &mut dyn EmitData) {
+                let mut o = EmitObject::new(emit);
+                for (k, v) in self {
+                    o.emit(k, v);
+                }
+            }
+        }
+    };
+}
+
+impl_json_emit_for_generic_map!(HashMap<K, V>);
+impl_json_emit_for_generic_map!(BTreeMap<K, V>);

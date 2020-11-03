@@ -1,4 +1,5 @@
 use json_stream::emit::*;
+use std::collections::HashMap;
 
 #[test]
 fn example() {
@@ -71,4 +72,22 @@ fn emitting_slice() {
     }
 
     assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+}
+
+#[test]
+fn emitting_object() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+
+        let m = {
+            let mut m = HashMap::new();
+            m.insert("a", 1);
+            m.insert("b", 2);
+            m
+        };
+        e.emit(&m);
+    }
+
+    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":1,"b":2}"#);
 }
