@@ -1,3 +1,5 @@
+use std::collections::LinkedList;
+use std::collections::VecDeque;
 use std::io::Write;
 
 pub struct Emitter<W: Write> {
@@ -192,29 +194,25 @@ impl JsonEmit for str {
     }
 }
 
-// TODO: add array impl when const generics land
-impl<T> private::Sealed for [T] {}
-impl<T> JsonEmit for [T]
-where
-    T: JsonEmit,
-{
-    fn write_to(&self, emit: &mut dyn EmitData) {
-        let mut a = EmitArray::new(emit);
-        for val in self {
-            a.emit(val)
+macro_rules! impl_json_emit_for_generic_seq {
+    ( $ty:ty ) => {
+        impl<T> private::Sealed for $ty {}
+        impl<T> JsonEmit for $ty
+        where
+            T: JsonEmit,
+        {
+            fn write_to(&self, emit: &mut dyn EmitData) {
+                let mut a = EmitArray::new(emit);
+                for val in self {
+                    a.emit(val)
+                }
+            }
         }
-    }
+    };
 }
 
-impl<T> private::Sealed for Vec<T> {}
-impl<T> JsonEmit for Vec<T>
-where
-    T: JsonEmit,
-{
-    fn write_to(&self, emit: &mut dyn EmitData) {
-        let mut a = EmitArray::new(emit);
-        for val in self {
-            a.emit(val)
-        }
-    }
-}
+// TODO: add array impl when const generics land
+impl_json_emit_for_generic_seq!([T]);
+impl_json_emit_for_generic_seq!(Vec<T>);
+impl_json_emit_for_generic_seq!(VecDeque<T>);
+impl_json_emit_for_generic_seq!(LinkedList<T>);
