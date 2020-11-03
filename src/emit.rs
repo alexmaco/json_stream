@@ -60,11 +60,15 @@ pub trait Emit {
 #[doc(hidden)]
 pub trait EmitData {
     fn put(&mut self, b: u8);
+    fn write(&mut self) -> &mut dyn Write;
 }
 
 impl<W: Write> EmitData for Emitter<W> {
     fn put(&mut self, b: u8) {
         self.dst.write(&[b]).unwrap();
+    }
+    fn write(&mut self) -> &mut dyn Write {
+        self.dst.by_ref()
     }
 }
 
@@ -170,23 +174,22 @@ pub trait JsonEmit: private::Sealed {
     fn write_to(&self, emit: &mut dyn EmitData);
 }
 
-macro_rules! impl_json_emit_for_integer {
+macro_rules! impl_json_emit_via_string_format {
     ( $($ty:ty),* ) => {
         $(
             impl private::Sealed for $ty {}
             impl JsonEmit for $ty {
                 fn write_to(&self, emit: &mut dyn EmitData) {
-                    let tmp = format!("{}", self);
-                    for b in tmp.as_bytes() {
-                        emit.put(*b)
-                    }
+                    write!(emit.write(), "{}", self).unwrap();
                 }
             }
         )*
     };
 }
 
-impl_json_emit_for_integer!(usize, isize, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128);
+impl_json_emit_via_string_format!(
+    usize, isize, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64, char, bool
+);
 
 impl private::Sealed for str {}
 impl JsonEmit for str {
