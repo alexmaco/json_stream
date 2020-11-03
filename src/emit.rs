@@ -12,19 +12,30 @@ impl<W: Write> Emitter<W> {
 }
 
 impl<W: Write> Emit for Emitter<W> {
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
+        value.write_to(self)
+    }
+
     fn array(&mut self) -> EmitArray {
         EmitArray::new(self)
     }
+
     fn object(&mut self) -> EmitObject {
         EmitObject::new(self)
     }
 }
 
 impl<'a> Emit for EmitArray<'a> {
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
+        self.start();
+        value.write_to(self.emit)
+    }
+
     fn array(&mut self) -> EmitArray {
         self.start();
         EmitArray::new(self.emit)
     }
+
     fn object(&mut self) -> EmitObject {
         self.start();
         EmitObject::new(self.emit)
@@ -32,7 +43,10 @@ impl<'a> Emit for EmitArray<'a> {
 }
 
 pub trait Emit {
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T);
+
     fn array(&mut self) -> EmitArray;
+
     fn object(&mut self) -> EmitObject;
 }
 
@@ -68,11 +82,6 @@ impl<'a> EmitArray<'a> {
             self.emit.put(b',');
         }
     }
-
-    pub fn emit<T: JsonEmit>(&mut self, value: T) {
-        self.start();
-        value.write_to(self.emit)
-    }
 }
 
 impl Drop for EmitArray<'_> {
@@ -104,7 +113,7 @@ impl<'a> EmitObject<'a> {
     }
 
     #[inline(always)]
-    fn key<S>(&mut self, key: S)
+    fn emit_key<S>(&mut self, key: S)
     where
         S: AsRef<str>,
     {
@@ -113,12 +122,12 @@ impl<'a> EmitObject<'a> {
         self.emit.put(b':');
     }
 
-    pub fn emit<S, V>(&mut self, key: S, value: V)
+    pub fn emit<S, V>(&mut self, key: S, value: &V)
     where
         S: AsRef<str>,
-        V: JsonEmit,
+        V: JsonEmit + ?Sized,
     {
-        self.key(key);
+        self.emit_key(key);
         value.write_to(self.emit);
     }
 
@@ -126,7 +135,7 @@ impl<'a> EmitObject<'a> {
     where
         S: AsRef<str>,
     {
-        self.key(key);
+        self.emit_key(key);
         EmitArray::new(self.emit)
     }
 
@@ -134,7 +143,7 @@ impl<'a> EmitObject<'a> {
     where
         S: AsRef<str>,
     {
-        self.key(key);
+        self.emit_key(key);
         EmitObject::new(self.emit)
     }
 }
@@ -151,12 +160,30 @@ mod private {
 
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
-    fn write_to(self, emit: &mut dyn EmitData);
+    fn write_to(&self, emit: &mut dyn EmitData);
 }
 
-impl private::Sealed for &str {}
-impl JsonEmit for &str {
-    fn write_to(self, emit: &mut dyn EmitData) {
+macro_rules! impl_json_emit_for_integer {
+    ( $($ty:ty),* ) => {
+        $(
+            impl private::Sealed for $ty {}
+            impl JsonEmit for $ty {
+                fn write_to(&self, emit: &mut dyn EmitData) {
+                    let tmp = format!("{}", self);
+                    for b in tmp.as_bytes() {
+                        emit.put(*b)
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_json_emit_for_integer!(usize, isize, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128);
+
+impl private::Sealed for str {}
+impl JsonEmit for str {
+    fn write_to(&self, emit: &mut dyn EmitData) {
         emit.put(b'"');
         for b in self.as_bytes() {
             emit.put(*b)
@@ -165,25 +192,29 @@ impl JsonEmit for &str {
     }
 }
 
-impl private::Sealed for usize {}
-impl JsonEmit for usize {
-    fn write_to(self, emit: &mut dyn EmitData) {
-        let tmp = format!("{}", self);
-        for b in tmp.as_bytes() {
-            emit.put(*b)
+// TODO: add array impl when const generics land
+impl<T> private::Sealed for [T] {}
+impl<T> JsonEmit for [T]
+where
+    T: JsonEmit,
+{
+    fn write_to(&self, emit: &mut dyn EmitData) {
+        let mut a = EmitArray::new(emit);
+        for val in self {
+            a.emit(val)
         }
     }
 }
 
-// enum ValWrap<'a> {
-//     Null,
-//     Bool(bool),
-//     Usize(usize),
-//     Str(&'a str),
-// }
-
-// impl<'a> From<&'a str> for ValWrap<'a> {
-//     fn from(s: &'a str) -> Self {
-//         Self::Str(s)
-//     }
-// }
+impl<T> private::Sealed for Vec<T> {}
+impl<T> JsonEmit for Vec<T>
+where
+    T: JsonEmit,
+{
+    fn write_to(&self, emit: &mut dyn EmitData) {
+        let mut a = EmitArray::new(emit);
+        for val in self {
+            a.emit(val)
+        }
+    }
+}
