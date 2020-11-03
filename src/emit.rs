@@ -199,6 +199,17 @@ impl JsonEmit for str {
     }
 }
 
+impl private::Sealed for String {}
+impl JsonEmit for String {
+    fn write_to(&self, emit: &mut dyn EmitData) {
+        emit.put(b'"');
+        for b in self.as_bytes() {
+            emit.put(*b)
+        }
+        emit.put(b'"');
+    }
+}
+
 macro_rules! impl_json_emit_for_generic_seq {
     ( $ty:ty ) => {
         impl<T> private::Sealed for $ty {}

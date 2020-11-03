@@ -89,5 +89,18 @@ fn emitting_object() {
         e.emit(&m);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":1,"b":2}"#);
+    let result_str = std::str::from_utf8(&buf).unwrap();
+    assert!(result_str == r#"{"a":1,"b":2}"# || result_str == r#"{"b":2,"a":1}"#);
+}
+
+#[test]
+fn emitting_string() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+        let s = String::from("abcd");
+        e.emit(&s);
+    }
+
+    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#""abcd""#);
 }
