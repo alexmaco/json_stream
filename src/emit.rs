@@ -31,17 +31,6 @@ impl<'a> Emit for EmitArray<'a> {
     }
 }
 
-impl<'a> Emit for EmitObject<'a> {
-    fn array(&mut self) -> EmitArray {
-        // self.start();
-        EmitArray::new(self.emit)
-    }
-    fn object(&mut self) -> EmitObject {
-        // self.start();
-        EmitObject::new(self.emit)
-    }
-}
-
 pub trait Emit {
     fn array(&mut self) -> EmitArray;
     fn object(&mut self) -> EmitObject;
@@ -114,15 +103,39 @@ impl<'a> EmitObject<'a> {
         }
     }
 
+    #[inline(always)]
+    fn key<S>(&mut self, key: S)
+    where
+        S: AsRef<str>,
+    {
+        self.start();
+        key.as_ref().write_to(self.emit);
+        self.emit.put(b':');
+    }
+
     pub fn emit<S, V>(&mut self, key: S, value: V)
     where
         S: AsRef<str>,
         V: JsonEmit,
     {
-        self.start();
-        key.as_ref().write_to(self.emit);
-        self.emit.put(b':');
+        self.key(key);
         value.write_to(self.emit);
+    }
+
+    pub fn emit_array<S>(&mut self, key: S) -> EmitArray
+    where
+        S: AsRef<str>,
+    {
+        self.key(key);
+        EmitArray::new(self.emit)
+    }
+
+    pub fn emit_object<S>(&mut self, key: S) -> EmitObject
+    where
+        S: AsRef<str>,
+    {
+        self.key(key);
+        EmitObject::new(self.emit)
     }
 }
 

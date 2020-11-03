@@ -31,3 +31,19 @@ fn commas_in_object() {
 
     assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":1,"b":2}"#);
 }
+
+#[test]
+fn commas_near_arrays_in_object() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+
+        let mut o = e.object();
+        o.emit_array("a");
+        let mut b = o.emit_array("b");
+        b.emit(3);
+        b.emit(4);
+    }
+
+    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":[],"b":[3,4]}"#);
+}
