@@ -94,12 +94,24 @@ impl Drop for EmitArray<'_> {
 
 pub struct EmitObject<'a> {
     emit: &'a mut dyn EmitData,
+    started: bool,
 }
 
 impl<'a> EmitObject<'a> {
     fn new(emit: &'a mut dyn EmitData) -> Self {
         emit.put(b'{');
-        Self { emit }
+        Self {
+            emit,
+            started: false,
+        }
+    }
+
+    fn start(&mut self) {
+        if !self.started {
+            self.started = true;
+        } else {
+            self.emit.put(b',');
+        }
     }
 
     pub fn emit<S, V>(&mut self, key: S, value: V)
@@ -107,6 +119,7 @@ impl<'a> EmitObject<'a> {
         S: AsRef<str>,
         V: JsonEmit,
     {
+        self.start();
         key.as_ref().write_to(self.emit);
         self.emit.put(b':');
         value.write_to(self.emit);
