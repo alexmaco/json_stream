@@ -1,13 +1,11 @@
-// use std::borrow::Cow;
 use std::io::Write;
 
-/// Writes bytes to a [`Read`], parses them as [`Json`], and returns a stream of values or sub-parsers via `fn next()`
 pub struct Emitter<W: Write> {
     dst: W,
 }
 
 impl<W: Write> Emitter<W> {
-    /// Constructs a new Emitter that will write from the provided Write.
+    /// Constructs a new Emitter that will write to the provided Write.
     pub fn new(dst: W) -> Self {
         Self { dst }
     }
@@ -17,6 +15,7 @@ impl<W: Write> Emitter<W> {
     }
 }
 
+#[doc(hidden)]
 pub trait Emit {
     fn put(&mut self, b: u8);
 }
@@ -76,14 +75,12 @@ impl<'a> EmitObject<'a> {
         Self { emit }
     }
 
-    // pub fn emit<S: for<'r> Into<Cow<'r, str>>, T: JsonEmit>(&mut self, key: S, value: T) {
-    //     let cow = key.into();
-    //     cow.write
-    //     value.write_to(self.emit)
-    // }
-
-    pub fn emit<T: JsonEmit>(&mut self, key: &str, value: T) {
-        private::Sealed::write_to(key, self.emit);
+    pub fn emit<S, V>(&mut self, key: S, value: V)
+    where
+        S: AsRef<str>,
+        V: JsonEmit,
+    {
+        key.as_ref().write_to(self.emit);
         self.emit.put(b':');
         value.write_to(self.emit);
     }
@@ -96,16 +93,16 @@ impl Drop for EmitObject<'_> {
 }
 
 mod private {
-    use super::Emit;
-    pub trait Sealed {
-        fn write_to(self, emit: &mut dyn Emit);
-    }
+    pub trait Sealed {}
 }
 
-pub trait JsonEmit: private::Sealed {}
+pub trait JsonEmit: private::Sealed {
+    #[doc(hidden)]
+    fn write_to(self, emit: &mut dyn Emit);
+}
 
-impl JsonEmit for &str {}
-impl private::Sealed for &str {
+impl private::Sealed for &str {}
+impl JsonEmit for &str {
     fn write_to(self, emit: &mut dyn Emit) {
         emit.put(b'"');
         for b in self.as_bytes() {
@@ -114,8 +111,9 @@ impl private::Sealed for &str {
         emit.put(b'"');
     }
 }
-impl JsonEmit for usize {}
-impl private::Sealed for usize {
+
+impl private::Sealed for usize {}
+impl JsonEmit for usize {
     fn write_to(self, emit: &mut dyn Emit) {
         let tmp = format!("{}", self);
         for b in tmp.as_bytes() {
