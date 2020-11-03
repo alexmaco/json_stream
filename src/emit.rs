@@ -9,30 +9,62 @@ impl<W: Write> Emitter<W> {
     pub fn new(dst: W) -> Self {
         Self { dst }
     }
-
-    pub fn array(&mut self) -> EmitArray {
-        EmitArray::new(self)
-    }
-}
-
-#[doc(hidden)]
-pub trait Emit {
-    fn put(&mut self, b: u8);
 }
 
 impl<W: Write> Emit for Emitter<W> {
+    fn array(&mut self) -> EmitArray {
+        EmitArray::new(self)
+    }
+    fn object(&mut self) -> EmitObject {
+        EmitObject::new(self)
+    }
+}
+
+impl<'a> Emit for EmitArray<'a> {
+    fn array(&mut self) -> EmitArray {
+        self.start();
+        EmitArray::new(self.emit)
+    }
+    fn object(&mut self) -> EmitObject {
+        self.start();
+        EmitObject::new(self.emit)
+    }
+}
+
+impl<'a> Emit for EmitObject<'a> {
+    fn array(&mut self) -> EmitArray {
+        // self.start();
+        EmitArray::new(self.emit)
+    }
+    fn object(&mut self) -> EmitObject {
+        // self.start();
+        EmitObject::new(self.emit)
+    }
+}
+
+pub trait Emit {
+    fn array(&mut self) -> EmitArray;
+    fn object(&mut self) -> EmitObject;
+}
+
+#[doc(hidden)]
+pub trait EmitData {
+    fn put(&mut self, b: u8);
+}
+
+impl<W: Write> EmitData for Emitter<W> {
     fn put(&mut self, b: u8) {
         self.dst.write(&[b]).unwrap();
     }
 }
 
 pub struct EmitArray<'a> {
-    emit: &'a mut dyn Emit,
+    emit: &'a mut dyn EmitData,
     started: bool,
 }
 
 impl<'a> EmitArray<'a> {
-    fn new(emit: &'a mut dyn Emit) -> Self {
+    fn new(emit: &'a mut dyn EmitData) -> Self {
         emit.put(b'[');
         Self {
             emit,
@@ -48,11 +80,6 @@ impl<'a> EmitArray<'a> {
         }
     }
 
-    pub fn emit_obj(&mut self) -> EmitObject {
-        self.start();
-        EmitObject::new(self.emit)
-    }
-
     pub fn emit<T: JsonEmit>(&mut self, value: T) {
         self.start();
         value.write_to(self.emit)
@@ -66,11 +93,11 @@ impl Drop for EmitArray<'_> {
 }
 
 pub struct EmitObject<'a> {
-    emit: &'a mut dyn Emit,
+    emit: &'a mut dyn EmitData,
 }
 
 impl<'a> EmitObject<'a> {
-    fn new(emit: &'a mut dyn Emit) -> Self {
+    fn new(emit: &'a mut dyn EmitData) -> Self {
         emit.put(b'{');
         Self { emit }
     }
@@ -98,12 +125,12 @@ mod private {
 
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
-    fn write_to(self, emit: &mut dyn Emit);
+    fn write_to(self, emit: &mut dyn EmitData);
 }
 
 impl private::Sealed for &str {}
 impl JsonEmit for &str {
-    fn write_to(self, emit: &mut dyn Emit) {
+    fn write_to(self, emit: &mut dyn EmitData) {
         emit.put(b'"');
         for b in self.as_bytes() {
             emit.put(*b)
@@ -114,7 +141,7 @@ impl JsonEmit for &str {
 
 impl private::Sealed for usize {}
 impl JsonEmit for usize {
-    fn write_to(self, emit: &mut dyn Emit) {
+    fn write_to(self, emit: &mut dyn EmitData) {
         let tmp = format!("{}", self);
         for b in tmp.as_bytes() {
             emit.put(*b)

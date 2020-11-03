@@ -9,7 +9,7 @@ fn example() {
         let mut arr = e.array();
         arr.emit("a");
         {
-            let mut obj = arr.emit_obj();
+            let mut obj = arr.object();
             obj.emit("k", "v");
         }
         arr.emit(3);
