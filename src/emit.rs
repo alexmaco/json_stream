@@ -9,25 +9,40 @@ use std::io::Write;
 
 pub struct Emitter<W: Write> {
     dst: W,
+    started: bool,
 }
 
 impl<W: Write> Emitter<W> {
     /// Constructs a new Emitter that will write to the provided Write.
     pub fn new(dst: W) -> Self {
-        Self { dst }
+        Self {
+            dst,
+            started: false,
+        }
+    }
+
+    fn start(&mut self) {
+        if !self.started {
+            self.started = true;
+        } else {
+            self.put(b'\n');
+        }
     }
 }
 
 impl<W: Write> Emit for Emitter<W> {
     fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
+        self.start();
         value.write_to(self)
     }
 
     fn array(&mut self) -> EmitArray {
+        self.start();
         EmitArray::new(self)
     }
 
     fn object(&mut self) -> EmitObject {
+        self.start();
         EmitObject::new(self)
     }
 }

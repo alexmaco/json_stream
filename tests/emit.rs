@@ -104,3 +104,24 @@ fn emitting_string() {
 
     assert_eq!(std::str::from_utf8(&buf).unwrap(), r#""abcd""#);
 }
+
+#[test]
+fn emitter_newline_between_items() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+
+        e.emit(&3);
+        e.emit("abc");
+        e.array().emit(&1);
+        e.object().emit("x", &5);
+    }
+
+    assert_eq!(
+        std::str::from_utf8(&buf).unwrap(),
+        r#"3
+"abc"
+[1]
+{"x":5}"#
+    );
+}
