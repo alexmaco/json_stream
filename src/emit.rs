@@ -80,7 +80,7 @@ pub trait EmitData {
 
 impl<W: Write> EmitData for Emitter<W> {
     fn put(&mut self, b: u8) {
-        self.dst.write(&[b]).unwrap();
+        self.dst.write_all(&[b]).unwrap();
     }
     fn write(&mut self) -> &mut dyn Write {
         self.dst.by_ref()
