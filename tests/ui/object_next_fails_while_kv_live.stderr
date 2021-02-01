@@ -7,4 +7,4 @@ error[E0499]: cannot borrow `obj` as mutable more than once at a time
 14 |     obj.next();
    |     ^^^ second mutable borrow occurs here
 15 | }
-   | - first borrow might be used here, when `_kv` is dropped and runs the destructor for type `std::result::Result<json_stream::parse::KeyVal<'_>, json_stream::parse::Error>`
+   | - first borrow might be used here, when `_kv` is dropped and runs the destructor for type `std::result::Result<KeyVal<'_>, json_stream::parse::Error>`
