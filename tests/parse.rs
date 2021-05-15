@@ -36,20 +36,36 @@ fn chars() {
     assert_eq!(chars, &['a', 'b', 'c']);
 }
 
-#[test]
-#[ignore]
-fn char_escapes() {
-    let mut p = Parser::new(r#""\r\"\t""#.as_bytes());
+fn test_single_char(expected: char, s: &str) {
+    let parsed = format!(r#""{}""#, s);
+    let mut p = Parser::new(parsed.as_bytes());
 
-    let s = p
+    let str_parser = p
         .next()
         .unwrap()
         .as_string()
         .expect("expected root object to be a string");
 
-    let chars: Vec<char> = s.read_chars().into_iter().collect();
+    let chars: Vec<char> = str_parser.read_chars().into_iter().collect();
 
-    assert_eq!(chars, &['\\', 'r', '"', '\\', 't']);
+    dbg!(&chars, s, expected, expected.escape_unicode().to_string());
+    assert_eq!(chars, &[expected]);
+}
+
+#[test]
+fn char_escapes() {
+    let pairs = [
+        ('\\', r#"\\"#),
+        ('"', r#"\""#),
+        ('\r', r#"\r"#),
+        ('\u{1234}', r#"\u{1234}"#),
+        ('\u{ab34}', r#"\u{ab34}"#),
+        ('\u{AB34}', r#"\u{ab34}"#),
+    ];
+
+    for (c, s) in &pairs {
+        test_single_char(*c, s);
+    }
 }
 
 #[test]

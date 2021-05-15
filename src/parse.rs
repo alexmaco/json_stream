@@ -1,20 +1,20 @@
-//! # Parse
+//! # Parse json
 //!
 //! This module provides a way to lazily parse JSON data.
-//! A [`Parser`] can read from any object implementing [`Read`], and will yield
-//! [`Json`] values in sequence like an iterator. Fixed-size items are parsed as values directly,
-//! but for strings, arrays and objects subparsers are returned instead.
-//! The caller can then invoke these subparsers to effectively parse the corresponsing item content.
+//! A [`Parser`] reads from anything implementing [`Read`], and will yield
+//! a sequence of [`Json`] values. Fixed-size items are parsed as values directly,
+//! but for strings, arrays and objects, subparsers are returned instead.
+//! The caller can then invoke these subparsers to actually parse the content of that item.
 //!
 //!
 //! ## Skipping
 //!
 //! When a [`ParseString`], [`ParseArray`], [`ParseObject`], or [`KeyVal`] is dropped,
-//! it marks that item for skipping. When the next JSON item is requested via a call to `fn next`,
-//! the item beyond the skipped one is returned.
-//!
-//! This allows efficient skipping of uninteresting items.
+//! that item, and everything it contains is skipped. Skipping is done efficiently and lazily,
+//! occurring only on the following call to `fn next`, which will return the next Json item
+//! on the same level.
 
+use core::convert::TryFrom;
 use std::io::{self, ErrorKind, Read};
 use std::iter::Peekable;
 
@@ -548,7 +548,19 @@ pub struct ParseChars<'a> {
 
 impl<'a> ParseChars<'a> {
     fn new(parse: &'a mut dyn Parse) -> Self {
-        Self { parse: parse }
+        Self { parse }
+    }
+
+    fn unicode_escape(&mut self) -> Option<char> {
+        let mut val = 0u32;
+        loop {
+            match self.parse.next_byte()? {
+                c @ b'0'..=b'9' => val = val * 16 + u32::from(c - b'0'),
+                c @ b'a'..=b'f' => val = val * 16 + u32::from(c - b'a') + 10,
+                b'}' => return char::try_from(val).ok(),
+                _ => return None,
+            }
+        }
     }
 }
 
@@ -564,6 +576,14 @@ impl<'a> Iterator for ParseChars<'a> {
                     continue;
                 }
                 b'"' if !escape => return None,
+                b'r' if escape => return Some('\r'),
+                b'u' if escape => match self.parse.next_byte()? {
+                    b'{' => match self.unicode_escape() {
+                        Some(c) => return Some(c),
+                        _ => continue,
+                    },
+                    _ => continue,
+                },
                 c => return Some(c.into()),
             }
         }
