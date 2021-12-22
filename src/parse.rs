@@ -111,7 +111,7 @@ impl<R: Read> Parse for Parser<R> {
         if self.skips.is_empty() {
             return;
         }
-        let skips = std::mem::replace(&mut self.skips, vec![]);
+        let skips = std::mem::take(&mut self.skips);
         for skip in skips {
             match skip {
                 Skip::String => skip_string(self),
@@ -425,7 +425,7 @@ impl<'a> KeyVal<'a> {
     /// Begins parsing the current object key.
     /// Panics if called more than once.
     pub fn key(&mut self) -> ParseString {
-        assert_eq!(self.key_consumed, false);
+        assert!(!self.key_consumed);
         self.key_consumed = true;
         ParseString::new(*self.parse.as_mut().unwrap())
     }
@@ -627,6 +627,7 @@ pub trait JsonAccess<'a>: private::Sealed {
     fn as_null(&self) -> Option<()>;
     fn as_bool(&self) -> Option<bool>;
     fn as_number(&self) -> Option<Number>;
+
     fn as_string(self) -> Option<ParseString<'a>>;
     fn as_array(self) -> Option<ParseArray<'a>>;
     fn as_object(self) -> Option<ParseObject<'a>>;
