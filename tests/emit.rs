@@ -75,6 +75,18 @@ fn emitting_slice() {
 }
 
 #[test]
+fn emitting_array() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+
+        e.emit(&[1, 2, 3]);
+    }
+
+    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+}
+
+#[test]
 fn emitting_object() {
     let mut buf = vec![];
     {

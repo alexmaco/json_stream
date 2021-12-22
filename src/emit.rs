@@ -245,7 +245,6 @@ macro_rules! impl_json_emit_for_generic_seq {
     };
 }
 
-// TODO: add array impl when const generics land
 impl_json_emit_for_generic_seq!([T]);
 impl_json_emit_for_generic_seq!(Vec<T>);
 impl_json_emit_for_generic_seq!(VecDeque<T>);
@@ -253,6 +252,17 @@ impl_json_emit_for_generic_seq!(LinkedList<T>);
 impl_json_emit_for_generic_seq!(HashSet<T>);
 impl_json_emit_for_generic_seq!(BTreeSet<T>);
 impl_json_emit_for_generic_seq!(BinaryHeap<T>);
+
+impl<T, const N: usize> private::Sealed for [T; N] {}
+impl<T, const N: usize> JsonEmit for [T; N]
+where
+    T: JsonEmit,
+{
+    #[inline(always)]
+    fn write_to(&self, emit: &mut dyn EmitData) {
+        self.as_slice().write_to(emit);
+    }
+}
 
 macro_rules! impl_json_emit_for_generic_map {
     ( $ty:ty ) => {
