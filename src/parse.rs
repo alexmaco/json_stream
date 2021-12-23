@@ -744,6 +744,75 @@ impl<'a> JsonAccess<'a> for JResult<'a> {
     }
 }
 
+impl<'a> private::Sealed for Option<JResult<'a>> {}
+impl<'a> JsonAccess<'a> for Option<JResult<'a>> {
+    #[inline(always)]
+    fn is_string(&self) -> bool {
+        match self {
+            Some(r) => r.is_string(),
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    fn is_array(&self) -> bool {
+        match self {
+            Some(r) => r.is_array(),
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    fn is_object(&self) -> bool {
+        match self {
+            Some(r) => r.is_object(),
+            _ => false,
+        }
+    }
+
+    fn as_null(&self) -> Option<()> {
+        match self {
+            Some(Ok(Json::Null)) => Some(()),
+            _ => None,
+        }
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            Some(Ok(Json::Bool(b))) => Some(*b),
+            _ => None,
+        }
+    }
+
+    fn as_number(&self) -> Option<Number> {
+        match self {
+            Some(Ok(Json::Number(n))) => Some(*n),
+            _ => None,
+        }
+    }
+
+    fn as_string(self) -> Option<ParseString<'a>> {
+        match self {
+            Some(Ok(Json::String(s))) => Some(s),
+            _ => None,
+        }
+    }
+
+    fn as_array(self) -> Option<ParseArray<'a>> {
+        match self {
+            Some(Ok(Json::Array(a))) => Some(a),
+            _ => None,
+        }
+    }
+
+    fn as_object(self) -> Option<ParseObject<'a>> {
+        match self {
+            Some(Ok(Json::Object(o))) => Some(o),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Error {
     err: Box<ErrorCode>,

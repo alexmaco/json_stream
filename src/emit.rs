@@ -64,6 +64,8 @@ impl<'a> Emit for EmitArray<'a> {
     }
 }
 
+/// Provides methods that can be used to emit a value inside the current value.
+/// [EmitObject] does not use this trait because it needs to emit key-value pairs.
 pub trait Emit {
     fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T);
 
@@ -184,6 +186,7 @@ mod private {
     pub trait Sealed {}
 }
 
+/// Implemented for types that can be emitted as JSON
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
     fn write_to(&self, emit: &mut dyn EmitData);

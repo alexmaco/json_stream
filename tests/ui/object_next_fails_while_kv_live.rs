@@ -7,7 +7,7 @@ fn main() {
         .next()
         .unwrap()
         .as_object()
-        .expect("expected root object to be an array");
+        .expect("expected root value to be an array");
 
     let _kv = obj.next().unwrap();
 

@@ -8,7 +8,7 @@ fn example() {
         .next()
         .unwrap()
         .as_array()
-        .expect("expected root object to be an array");
+        .expect("expected root value to be an array");
 
     let mut seen: Vec<String> = vec![];
 
@@ -29,7 +29,7 @@ fn chars() {
         .next()
         .unwrap()
         .as_string()
-        .expect("expected root object to be a string");
+        .expect("expected root value to be a string");
 
     let chars: Vec<char> = s.read_chars().into_iter().collect();
 
@@ -44,7 +44,7 @@ fn test_single_char(expected: char, s: &str) {
         .next()
         .unwrap()
         .as_string()
-        .expect("expected root object to be a string");
+        .expect("expected root value to be a string");
 
     let chars: Vec<char> = str_parser.read_chars().into_iter().collect();
 
@@ -89,7 +89,7 @@ fn empty_object_no_keyval() {
 
     let mut obj = match p.next() {
         Some(Ok(Json::Object(obj))) => obj,
-        _ => panic!("expected root object to be an object"),
+        _ => panic!("expected root value to be an object"),
     };
 
     assert!(obj.next().is_none());
@@ -101,7 +101,7 @@ fn object_and_keyval() {
 
     let mut obj = match p.next() {
         Some(Ok(Json::Object(obj))) => obj,
-        _ => panic!("expected root object to be an object"),
+        _ => panic!("expected root value to be an object"),
     };
 
     let mut kv = obj.next().unwrap().unwrap();
@@ -126,7 +126,7 @@ fn object_skipping() {
         .next()
         .unwrap()
         .as_object()
-        .expect("expected root object to be an object");
+        .expect("expected root value to be an object");
 
     let mut kv = obj.next().unwrap().unwrap();
     assert_eq!(kv.key().read_owned(), "a");
@@ -137,6 +137,28 @@ fn object_skipping() {
 }
 
 #[test]
+fn array_skipping() {
+    let mut p = Parser::new(r#"[1, [2,3], 4]"#.as_bytes());
+
+    let mut arr = p
+        .next()
+        .unwrap()
+        .as_array()
+        .expect("expected root value to be an array");
+
+    let one = arr.next().as_number();
+    assert_eq!(one, Some(Number::from(1u32)));
+
+    let mut sub_arr = arr.next().as_array().unwrap();
+    let two = sub_arr.next().as_number();
+    assert_eq!(two, Some(Number::from(2u32)));
+    drop(sub_arr);
+
+    let four = arr.next().as_number();
+    assert_eq!(four, Some(Number::from(4u32)));
+}
+
+#[test]
 fn missing_comma_error() {
     let mut p = Parser::new("[1 2]".as_bytes());
 
@@ -144,7 +166,7 @@ fn missing_comma_error() {
         .next()
         .unwrap()
         .as_array()
-        .expect("expected root object to be an array");
+        .expect("expected root value to be an array");
 
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
     assert_eq!(
@@ -162,7 +184,7 @@ fn trailing_comma_error() {
         .next()
         .unwrap()
         .as_array()
-        .expect("expected root object to be an array");
+        .expect("expected root value to be an array");
 
     assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
     assert_eq!(

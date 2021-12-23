@@ -6,7 +6,7 @@ fn main() {
     let json = p.next().unwrap();
     let _arr = json
         .as_array()
-        .expect("expected root object to be an array");
+        .expect("expected root value to be an array");
 
     let _j2 = p.next();
 }

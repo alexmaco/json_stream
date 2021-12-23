@@ -5,7 +5,7 @@
 //! This library provides a lazy pull parser, as well as an emitter for
 //! reading and writing JSON to anything implementing [`io::Read`](std::io::Read), or [`io::Write`](std::io::Write) respectively.
 //!
-//! The main use is processing JSON values that cannot be completely buffered in RAM.
+//! The main use is processing JSON values that cannot be fully buffered in memory.
 //!
 //!
 //! ## General API Notes

@@ -27,7 +27,7 @@ let mut arr = p
     .next()
     .unwrap()
     .as_array()
-    .expect("expected root object to be an array");
+    .expect("expected root value to be an array");
 
 let mut seen: Vec<String> = vec![];
 
