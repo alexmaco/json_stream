@@ -406,7 +406,7 @@ fn skip_obj(parse: &mut dyn Parse) {
 ///
 /// They key and the value may be read independently, and either may be ignored.
 ///
-/// For example, it's possible the only read the key, and ignore the value,
+/// For example, it's possible to only read the key, and ignore the value,
 /// which will be skipped efficiently.
 pub struct KeyVal<'a> {
     // None here means the object is exhausted
@@ -500,7 +500,7 @@ impl<'a> ParseString<'a> {
 
     /// Parses the entire string into the supplied [`String`].
     /// This is useful to avoid allocating a new String,
-    /// or to preallocate a buffer when the client code can guess the string length.
+    /// or for preallocating a buffer when string length can be guessed.
     pub fn read_into(mut self, buf: &mut String) -> Result<(), Error> {
         let parse = self.parse.take().unwrap();
         loop {

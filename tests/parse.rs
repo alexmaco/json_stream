@@ -31,9 +31,23 @@ fn chars() {
         .as_string()
         .expect("expected root value to be a string");
 
-    let chars: Vec<char> = s.read_chars().into_iter().collect();
+    let chars: Vec<char> = s.read_chars().collect();
 
     assert_eq!(chars, &['a', 'b', 'c']);
+}
+
+#[test]
+fn chars_into_string() {
+    let mut p = Parser::new(r#""abc""#.as_bytes());
+
+    let s = p
+        .next()
+        .as_string()
+        .expect("expected root value to be a string");
+
+    let chars: String = s.read_chars().collect();
+
+    assert_eq!(chars, "abc");
 }
 
 fn test_single_char(expected: char, s: &str) {
