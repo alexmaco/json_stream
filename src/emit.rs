@@ -264,7 +264,7 @@ impl JsonEmit for String {
 
 macro_rules! impl_json_emit_for_generic_seq {
     ( $ty:ty ) => {
-        impl<T> private::Sealed for $ty {}
+        impl<T> private::Sealed for $ty where T: JsonEmit {}
         impl<T> JsonEmit for $ty
         where
             T: JsonEmit,
@@ -287,7 +287,7 @@ impl_json_emit_for_generic_seq!(HashSet<T>);
 impl_json_emit_for_generic_seq!(BTreeSet<T>);
 impl_json_emit_for_generic_seq!(BinaryHeap<T>);
 
-impl<T, const N: usize> private::Sealed for [T; N] {}
+impl<T, const N: usize> private::Sealed for [T; N] where T: JsonEmit {}
 impl<T, const N: usize> JsonEmit for [T; N]
 where
     T: JsonEmit,
