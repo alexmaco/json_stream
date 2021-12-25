@@ -6,7 +6,7 @@ A streaming JSON parser/emitter for rust.
 
 * to process a 50GiB json on a machine with 16GiB of ram
 * to process a 10MiB json on an embedded device with 2MiB of ram
-* to read and write large amounts of json off a socket directly, without the need to buffer
+* to read and write large amounts of json off a socket directly, without the need to buffer everything
 
 ## Features
 
@@ -25,7 +25,6 @@ let mut p = Parser::new(s.as_bytes());
 
 let mut arr = p
     .next()
-    .unwrap()
     .as_array()
     .expect("expected root value to be an array");
 

@@ -24,7 +24,8 @@ pub struct Parser<R: Read> {
     skips: Vec<Skip>,
 }
 
-type JResult<'a> = std::result::Result<Json<'a>, Error>;
+type Result<'a> = StdResult<Json<'a>, Error>;
+type StdResult<T, E> = std::result::Result<T, E>;
 
 impl<R: Read> Parser<R> {
     /// Constructs a new Parser that will read from the provided object.
@@ -38,7 +39,7 @@ impl<R: Read> Parser<R> {
     /// Returns the next JSON item.
     /// A Parser will read any number of whitespace-separated JSON items and return them in order.
     /// Returns None when the input is exhausted.
-    pub fn next(&mut self) -> Option<JResult> {
+    pub fn next(&mut self) -> Option<Result> {
         self.do_skips();
         self.eat_whitespace();
         Some(next_any_item(self.next_byte()?, self))
@@ -123,7 +124,7 @@ impl<R: Read> Parse for Parser<R> {
     }
 }
 
-fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> JResult<'a> {
+fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> Result<'a> {
     match b {
         b'0'..=b'9' | b'-' => parse_number(parse, b),
         b'n' => parse_ident(parse, b"ull", Json::Null),
@@ -140,7 +141,7 @@ fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> JResult<'a> {
     }
 }
 
-fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> JResult<'a> {
+fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> Result<'a> {
     for b in ident {
         let read = match parse.next_byte() {
             Some(b) => b,
@@ -154,7 +155,7 @@ fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> JResul
     Ok(res)
 }
 
-fn parse_number(parse: &mut dyn Parse, byte: u8) -> JResult {
+fn parse_number(parse: &mut dyn Parse, byte: u8) -> Result {
     let mut s = String::new();
     s.push(byte.into());
     while let Some(b) = parse.peek_byte() {
@@ -294,7 +295,7 @@ impl<'a> ParseArray<'a> {
         }
     }
 
-    pub fn next<'b>(&'b mut self) -> Option<JResult<'b>> {
+    pub fn next<'b>(&'b mut self) -> Option<Result<'b>> {
         if self.ended {
             return None;
         }
@@ -360,7 +361,7 @@ impl<'a> ParseObject<'a> {
             ended: false,
         }
     }
-    pub fn next(&mut self) -> Option<Result<KeyVal, Error>> {
+    pub fn next(&mut self) -> Option<StdResult<KeyVal, Error>> {
         if self.ended {
             return None;
         }
@@ -432,7 +433,7 @@ impl<'a> KeyVal<'a> {
 
     /// Obtains a [`Json`] for this object value.
     /// Skips and discards the key if it was not already retrieved.
-    pub fn value(mut self) -> JResult<'a> {
+    pub fn value(mut self) -> Result<'a> {
         let parse = self.parse.take().unwrap();
         read_value(parse, self.key_consumed)
     }
@@ -464,7 +465,7 @@ fn skip_obj_value(parse: &mut dyn Parse, key_consumed: bool) {
     }
 }
 
-fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> JResult {
+fn read_value(parse: &mut dyn Parse, key_consumed: bool) -> Result {
     if !key_consumed {
         skip_string(parse);
     }
@@ -501,7 +502,7 @@ impl<'a> ParseString<'a> {
     /// Parses the entire string into the supplied [`String`].
     /// This is useful to avoid allocating a new String,
     /// or for preallocating a buffer when string length can be guessed.
-    pub fn read_into(mut self, buf: &mut String) -> Result<(), Error> {
+    pub fn read_into(mut self, buf: &mut String) -> StdResult<(), Error> {
         let parse = self.parse.take().unwrap();
         loop {
             match parse.next_byte() {
@@ -693,8 +694,8 @@ impl<'a> JsonAccess<'a> for Json<'a> {
     }
 }
 
-impl private::Sealed for JResult<'_> {}
-impl<'a> JsonAccess<'a> for JResult<'a> {
+impl private::Sealed for Result<'_> {}
+impl<'a> JsonAccess<'a> for Result<'a> {
     fn as_null(&self) -> Option<()> {
         self.as_ref().ok()?.as_null()
     }
@@ -744,8 +745,8 @@ impl<'a> JsonAccess<'a> for JResult<'a> {
     }
 }
 
-impl<'a> private::Sealed for Option<JResult<'a>> {}
-impl<'a> JsonAccess<'a> for Option<JResult<'a>> {
+impl<'a> private::Sealed for Option<Result<'a>> {}
+impl<'a> JsonAccess<'a> for Option<Result<'a>> {
     #[inline(always)]
     fn is_string(&self) -> bool {
         match self {

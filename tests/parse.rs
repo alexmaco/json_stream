@@ -6,7 +6,6 @@ fn example() {
 
     let mut arr = p
         .next()
-        .unwrap()
         .as_array()
         .expect("expected root value to be an array");
 
@@ -27,7 +26,6 @@ fn chars() {
 
     let s = p
         .next()
-        .unwrap()
         .as_string()
         .expect("expected root value to be a string");
 
@@ -56,7 +54,6 @@ fn test_single_char(expected: char, s: &str) {
 
     let str_parser = p
         .next()
-        .unwrap()
         .as_string()
         .expect("expected root value to be a string");
 
@@ -86,13 +83,13 @@ fn char_escapes() {
 fn basics() {
     let mut p = Parser::new("null true false 0 1 -2 6.28".as_bytes());
 
-    assert!(p.next().unwrap().is_null());
-    assert_eq!(p.next().unwrap().as_bool(), Some(true));
-    assert_eq!(p.next().unwrap().as_bool(), Some(false));
-    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(0)));
-    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(1)));
-    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(-2)));
-    assert_eq!(p.next().unwrap().as_number(), Some(Number::from(6.28)));
+    assert!(p.next().is_null());
+    assert_eq!(p.next().as_bool(), Some(true));
+    assert_eq!(p.next().as_bool(), Some(false));
+    assert_eq!(p.next().as_number(), Some(Number::from(0)));
+    assert_eq!(p.next().as_number(), Some(Number::from(1)));
+    assert_eq!(p.next().as_number(), Some(Number::from(-2)));
+    assert_eq!(p.next().as_number(), Some(Number::from(6.28)));
 
     assert!(p.next().is_none());
 }
@@ -138,7 +135,6 @@ fn object_skipping() {
 
     let mut obj = p
         .next()
-        .unwrap()
         .as_object()
         .expect("expected root value to be an object");
 
@@ -156,7 +152,6 @@ fn array_skipping() {
 
     let mut arr = p
         .next()
-        .unwrap()
         .as_array()
         .expect("expected root value to be an array");
 
@@ -178,16 +173,15 @@ fn missing_comma_error() {
 
     let mut arr = p
         .next()
-        .unwrap()
         .as_array()
         .expect("expected root value to be an array");
 
-    assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
+    assert_eq!(arr.next().as_number(), Some(Number::from(1)));
     assert_eq!(
         arr.next().unwrap().unwrap_err().syntax(),
         Some(SyntaxError::MissingComma)
     );
-    assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(2)));
+    assert_eq!(arr.next().as_number(), Some(Number::from(2)));
 }
 
 #[test]
@@ -200,7 +194,7 @@ fn trailing_comma_error() {
         .as_array()
         .expect("expected root value to be an array");
 
-    assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(1)));
+    assert_eq!(arr.next().as_number(), Some(Number::from(1)));
     assert_eq!(
         arr.next().unwrap().unwrap_err().syntax(),
         Some(SyntaxError::TrailingComma)
@@ -209,7 +203,7 @@ fn trailing_comma_error() {
         arr.next().unwrap().unwrap_err().syntax(),
         Some(SyntaxError::TrailingComma)
     );
-    assert_eq!(arr.next().unwrap().as_number(), Some(Number::from(2)));
+    assert_eq!(arr.next().as_number(), Some(Number::from(2)));
 }
 
 mod identifier_errors {

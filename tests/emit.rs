@@ -1,5 +1,6 @@
 use json_stream::emit::*;
 use std::collections::HashMap;
+use std::str::from_utf8;
 
 #[test]
 fn example() {
@@ -16,7 +17,7 @@ fn example() {
         arr.emit(&3);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"["a",{"k":"v"},3]"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"["a",{"k":"v"},3]"#);
 }
 
 #[test]
@@ -30,7 +31,7 @@ fn commas_in_object() {
         o.emit("b", &2);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":1,"b":2}"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"{"a":1,"b":2}"#);
 }
 
 #[test]
@@ -46,7 +47,7 @@ fn commas_near_arrays_in_object() {
         b.emit(&4);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"{"a":[],"b":[3,4]}"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"{"a":[],"b":[3,4]}"#);
 }
 
 #[test]
@@ -59,7 +60,7 @@ fn emitting_vecs() {
         e.emit(&v);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
 }
 
 #[test]
@@ -71,7 +72,7 @@ fn emitting_slice() {
         e.emit(&[1, 2, 3][..]);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
 }
 
 #[test]
@@ -83,7 +84,7 @@ fn emitting_array() {
         e.emit(&[1, 2, 3]);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
 }
 
 #[test]
@@ -101,7 +102,7 @@ fn emitting_object() {
         e.emit(&m);
     }
 
-    let result_str = std::str::from_utf8(&buf).unwrap();
+    let result_str = from_utf8(&buf).unwrap();
     assert!(result_str == r#"{"a":1,"b":2}"# || result_str == r#"{"b":2,"a":1}"#);
 }
 
@@ -114,7 +115,7 @@ fn emitting_string() {
         e.emit(&s);
     }
 
-    assert_eq!(std::str::from_utf8(&buf).unwrap(), r#""abcd""#);
+    assert_eq!(from_utf8(&buf).unwrap(), r#""abcd""#);
 }
 
 #[test]
@@ -130,7 +131,7 @@ fn emitter_newline_between_items() {
     }
 
     assert_eq!(
-        std::str::from_utf8(&buf).unwrap(),
+        from_utf8(&buf).unwrap(),
         r#"3
 "abc"
 [1]
