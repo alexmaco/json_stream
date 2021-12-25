@@ -1,11 +1,5 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::BinaryHeap;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::LinkedList;
-use std::collections::VecDeque;
-use std::io::Write;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
+use std::io::{self, Write};
 
 pub struct Emitter<W: Write> {
     dst: W,
@@ -36,6 +30,11 @@ impl<W: Write> Emit for Emitter<W> {
         value.write_to(self)
     }
 
+    fn string(&mut self) -> EmitString {
+        // self.start()
+        EmitString::new(self)
+    }
+
     fn array(&mut self) -> EmitArray {
         self.start();
         EmitArray::new(self)
@@ -51,6 +50,11 @@ impl<'a> Emit for EmitArray<'a> {
     fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
         self.start();
         value.write_to(self.emit)
+    }
+
+    fn string(&mut self) -> EmitString {
+        // self.start()
+        EmitString::new(self.emit)
     }
 
     fn array(&mut self) -> EmitArray {
@@ -69,6 +73,8 @@ impl<'a> Emit for EmitArray<'a> {
 pub trait Emit {
     fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T);
 
+    fn string(&mut self) -> EmitString;
+
     fn array(&mut self) -> EmitArray;
 
     fn object(&mut self) -> EmitObject;
@@ -86,6 +92,31 @@ impl<W: Write> EmitData for Emitter<W> {
     }
     fn write(&mut self) -> &mut dyn Write {
         self.dst.by_ref()
+    }
+}
+
+pub struct EmitString<'a> {
+    emit: &'a mut dyn EmitData,
+}
+
+impl<'a> EmitString<'a> {
+    fn new(emit: &'a mut dyn EmitData) -> Self {
+        emit.put(b'"');
+        Self { emit }
+    }
+
+    pub fn char(&mut self, c: char) -> Result {
+        write!(self.emit.write(), "{}", c).map_err(Error::from)
+    }
+
+    pub fn str(&mut self, s: &str) -> Result {
+        write!(self.emit.write(), "{}", s).map_err(Error::from)
+    }
+}
+
+impl Drop for EmitString<'_> {
+    fn drop(&mut self) {
+        self.emit.put(b'"')
     }
 }
 
@@ -186,7 +217,7 @@ mod private {
     pub trait Sealed {}
 }
 
-/// Implemented for types that can be emitted as JSON
+/// Implemented for primitve types that can be emitted as JSON
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
     fn write_to(&self, emit: &mut dyn EmitData);
@@ -287,3 +318,26 @@ macro_rules! impl_json_emit_for_generic_map {
 
 impl_json_emit_for_generic_map!(HashMap<K, V>);
 impl_json_emit_for_generic_map!(BTreeMap<K, V>);
+
+type Result = std::result::Result<(), Error>;
+
+#[derive(Debug)]
+pub struct Error {
+    err: Box<ErrorCode>,
+}
+
+// Modeled after serde_json
+#[derive(Debug)]
+pub(crate) enum ErrorCode {
+    /// Catchall for syntax error messages
+    // Message(Box<str>),
+    Io(io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Self {
+            err: Box::new(ErrorCode::Io(e)),
+        }
+    }
+}

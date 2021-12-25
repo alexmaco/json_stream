@@ -119,6 +119,19 @@ fn emitting_string() {
 }
 
 #[test]
+fn chars() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+        let mut s = e.string();
+        s.char('a').unwrap();
+        s.str("bcd").unwrap();
+    }
+
+    assert_eq!(from_utf8(&buf).unwrap(), r#""abcd""#);
+}
+
+#[test]
 fn emitter_newline_between_items() {
     let mut buf = vec![];
     {
