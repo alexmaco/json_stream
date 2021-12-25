@@ -217,7 +217,7 @@ mod private {
     pub trait Sealed {}
 }
 
-/// Implemented for primitve types that can be emitted as JSON
+/// Implemented for primitve and standard library types that can be emitted as JSON
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
     fn write_to(&self, emit: &mut dyn EmitData);

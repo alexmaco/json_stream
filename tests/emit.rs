@@ -1,5 +1,6 @@
 use json_stream::emit::*;
-use std::collections::HashMap;
+use std::any::type_name;
+use std::collections::{BTreeSet, BinaryHeap, HashMap, LinkedList, VecDeque};
 use std::str::from_utf8;
 
 #[test]
@@ -50,41 +51,42 @@ fn commas_near_arrays_in_object() {
     assert_eq!(from_utf8(&buf).unwrap(), r#"{"a":[],"b":[3,4]}"#);
 }
 
-#[test]
-fn emitting_vecs() {
+fn emit_thing_test<T: JsonEmit + ?Sized>(val: &T, expect: &str) {
     let mut buf = vec![];
-    {
-        let mut e = Emitter::new(&mut buf);
+    let mut e = Emitter::new(&mut buf);
 
-        let v: Vec<usize> = vec![1, 2, 3];
-        e.emit(&v);
-    }
+    e.emit(val);
 
-    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+    assert_eq!(
+        from_utf8(&buf).unwrap(),
+        expect,
+        "emitting failed for T={}",
+        type_name::<T>()
+    );
 }
 
 #[test]
-fn emitting_slice() {
-    let mut buf = vec![];
-    {
-        let mut e = Emitter::new(&mut buf);
+fn basic_sequences() {
+    let v: Vec<usize> = vec![1, 2, 3];
+    emit_thing_test::<Vec<usize>>(&v, r#"[1,2,3]"#);
 
-        e.emit(&[1, 2, 3][..]);
-    }
+    let slice = &[1, 2, 3][..];
+    emit_thing_test::<[usize]>(slice, r#"[1,2,3]"#);
 
-    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
-}
+    let arr = [1, 2, 3];
+    emit_thing_test::<[usize; 3]>(&arr, r#"[1,2,3]"#);
 
-#[test]
-fn emitting_array() {
-    let mut buf = vec![];
-    {
-        let mut e = Emitter::new(&mut buf);
+    let deque = VecDeque::from([1, 2, 3]);
+    emit_thing_test::<VecDeque<_>>(&deque, r#"[1,2,3]"#);
 
-        e.emit(&[1, 2, 3]);
-    }
+    let list = LinkedList::from([1, 2, 3]);
+    emit_thing_test::<LinkedList<_>>(&list, r#"[1,2,3]"#);
 
-    assert_eq!(from_utf8(&buf).unwrap(), r#"[1,2,3]"#);
+    let tset = BTreeSet::from([1, 2, 3]);
+    emit_thing_test::<BTreeSet<_>>(&tset, r#"[1,2,3]"#);
+
+    let heap = BinaryHeap::from([1, 2, 3]);
+    emit_thing_test::<BinaryHeap<_>>(&heap, r#"[3,2,1]"#);
 }
 
 #[test]
