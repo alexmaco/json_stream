@@ -322,22 +322,17 @@ impl_json_emit_for_generic_map!(BTreeMap<K, V>);
 type Result = std::result::Result<(), Error>;
 
 #[derive(Debug)]
-pub struct Error {
-    err: Box<ErrorCode>,
-}
+pub struct Error(Box<ErrorCode>);
 
 // Modeled after serde_json
+#[non_exhaustive]
 #[derive(Debug)]
 pub(crate) enum ErrorCode {
-    /// Catchall for syntax error messages
-    // Message(Box<str>),
     Io(io::Error),
 }
 
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
-        Self {
-            err: Box::new(ErrorCode::Io(e)),
-        }
+        Self(Box::new(ErrorCode::Io(e)))
     }
 }
