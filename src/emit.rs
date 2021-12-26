@@ -7,7 +7,9 @@ pub struct Emitter<W: Write> {
 }
 
 impl<W: Write> Emitter<W> {
-    /// Constructs a new Emitter that will write to the provided Write.
+    /// Constructs a new Emitter that will write to the provided [Write].
+    /// It is generally useful that the [Write] implementation be buffered
+    /// to avoid losing ']' or '}' bytes when emitters are dropped.
     pub fn new(dst: W) -> Self {
         Self {
             dst,
@@ -16,84 +18,91 @@ impl<W: Write> Emitter<W> {
     }
 
     #[inline]
-    fn start(&mut self) {
+    fn start(&mut self) -> Result {
         if !self.started {
             self.started = true;
+            Ok(())
         } else {
-            self.put(b'\n');
+            self.put(b'\n')
         }
     }
 }
 
 impl<W: Write> Emit for Emitter<W> {
-    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
-        self.start();
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) -> Result {
+        self.start()?;
         value.write_to(self)
     }
 
-    fn string(&mut self) -> EmitString {
-        self.start();
+    fn string(&mut self) -> Result<EmitString> {
+        self.start()?;
         EmitString::new(self)
     }
 
-    fn array(&mut self) -> EmitArray {
-        self.start();
+    fn array(&mut self) -> Result<EmitArray> {
+        self.start()?;
         EmitArray::new(self)
     }
 
-    fn object(&mut self) -> EmitObject {
-        self.start();
+    fn object(&mut self) -> Result<EmitObject> {
+        self.start()?;
         EmitObject::new(self)
     }
 }
 
 impl<'a> Emit for EmitArray<'a> {
-    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) {
-        self.start();
-        value.write_to(self.emit)
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) -> Result {
+        self.start()?;
+        value.write_to(self.emit).map_err(Error::from)
     }
 
-    fn string(&mut self) -> EmitString {
-        self.start();
+    fn string(&mut self) -> Result<EmitString> {
+        self.start()?;
         EmitString::new(self.emit)
     }
 
-    fn array(&mut self) -> EmitArray {
-        self.start();
+    fn array(&mut self) -> Result<EmitArray> {
+        self.start()?;
         EmitArray::new(self.emit)
     }
 
-    fn object(&mut self) -> EmitObject {
-        self.start();
+    fn object(&mut self) -> Result<EmitObject> {
+        self.start()?;
         EmitObject::new(self.emit)
     }
 }
 
 /// Provides methods that can be used to emit a value inside the current value.
-/// [EmitObject] does not use this trait because it needs to emit key-value pairs.
+/// [EmitObject] does not use this trait because it emits key-value pairs.
 pub trait Emit {
-    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T);
+    fn emit<T: JsonEmit + ?Sized>(&mut self, value: &T) -> Result;
 
-    fn string(&mut self) -> EmitString;
+    fn string(&mut self) -> Result<EmitString>;
 
-    fn array(&mut self) -> EmitArray;
+    fn array(&mut self) -> Result<EmitArray>;
 
-    fn object(&mut self) -> EmitObject;
+    fn object(&mut self) -> Result<EmitObject>;
 }
 
 #[doc(hidden)]
 pub trait EmitData {
-    fn put(&mut self, b: u8);
+    fn put(&mut self, b: u8) -> Result;
     fn write(&mut self) -> &mut dyn Write;
 }
 
 impl<W: Write> EmitData for Emitter<W> {
-    fn put(&mut self, b: u8) {
-        self.dst.write_all(&[b]).unwrap();
+    fn put(&mut self, b: u8) -> Result {
+        self.dst.write_all(&[b]).map_err(Error::from)
     }
     fn write(&mut self) -> &mut dyn Write {
         self.dst.by_ref()
     }
+}
+
+macro_rules! emit_to {
+    ($dst:expr, $($arg:tt)*) => (
+        write!($dst, $($arg)*).map_err($crate::emit::Error::from)
+    )
 }
 
 pub struct EmitString<'a> {
@@ -101,23 +110,23 @@ pub struct EmitString<'a> {
 }
 
 impl<'a> EmitString<'a> {
-    fn new(emit: &'a mut dyn EmitData) -> Self {
-        emit.put(b'"');
-        Self { emit }
+    fn new(emit: &'a mut dyn EmitData) -> Result<Self> {
+        emit.put(b'"')?;
+        Ok(Self { emit })
     }
 
     pub fn char(&mut self, c: char) -> Result {
-        write!(self.emit.write(), "{}", c).map_err(Error::from)
+        emit_to!(self.emit.write(), "{}", c)
     }
 
     pub fn str(&mut self, s: &str) -> Result {
-        write!(self.emit.write(), "{}", s).map_err(Error::from)
+        emit_to!(self.emit.write(), "{}", s)
     }
 }
 
 impl Drop for EmitString<'_> {
     fn drop(&mut self) {
-        self.emit.put(b'"')
+        self.emit.put(b'"').unwrap();
     }
 }
 
@@ -127,27 +136,28 @@ pub struct EmitArray<'a> {
 }
 
 impl<'a> EmitArray<'a> {
-    fn new(emit: &'a mut dyn EmitData) -> Self {
-        emit.put(b'[');
-        Self {
+    fn new(emit: &'a mut dyn EmitData) -> Result<Self> {
+        emit.put(b'[')?;
+        Ok(Self {
             emit,
             started: false,
-        }
+        })
     }
 
     #[inline]
-    fn start(&mut self) {
+    fn start(&mut self) -> Result {
         if !self.started {
             self.started = true;
+            Ok(())
         } else {
-            self.emit.put(b',');
+            self.emit.put(b',')
         }
     }
 }
 
 impl Drop for EmitArray<'_> {
     fn drop(&mut self) {
-        self.emit.put(b']')
+        self.emit.put(b']').unwrap();
     }
 }
 
@@ -157,62 +167,63 @@ pub struct EmitObject<'a> {
 }
 
 impl<'a> EmitObject<'a> {
-    fn new(emit: &'a mut dyn EmitData) -> Self {
-        emit.put(b'{');
-        Self {
+    fn new(emit: &'a mut dyn EmitData) -> Result<Self> {
+        emit.put(b'{')?;
+        Ok(Self {
             emit,
             started: false,
-        }
+        })
     }
 
     #[inline]
-    fn start(&mut self) {
+    fn start(&mut self) -> Result {
         if !self.started {
             self.started = true;
+            Ok(())
         } else {
-            self.emit.put(b',');
+            self.emit.put(b',')
         }
     }
 
     #[inline(always)]
-    fn emit_key<S>(&mut self, key: S)
+    fn emit_key<S>(&mut self, key: S) -> Result
     where
         S: AsRef<str>,
     {
-        self.start();
-        key.as_ref().write_to(self.emit);
-        self.emit.put(b':');
+        self.start()?;
+        key.as_ref().write_to(self.emit)?;
+        self.emit.put(b':')
     }
 
-    pub fn emit<S, V>(&mut self, key: S, value: &V)
+    pub fn emit<S, V>(&mut self, key: S, value: &V) -> Result
     where
         S: AsRef<str>,
         V: JsonEmit + ?Sized,
     {
-        self.emit_key(key);
-        value.write_to(self.emit);
+        self.emit_key(key)?;
+        value.write_to(self.emit)
     }
 
-    pub fn emit_array<S>(&mut self, key: S) -> EmitArray
+    pub fn emit_array<S>(&mut self, key: S) -> Result<EmitArray>
     where
         S: AsRef<str>,
     {
-        self.emit_key(key);
+        self.emit_key(key)?;
         EmitArray::new(self.emit)
     }
 
-    pub fn emit_object<S>(&mut self, key: S) -> EmitObject
+    pub fn emit_object<S>(&mut self, key: S) -> Result<EmitObject>
     where
         S: AsRef<str>,
     {
-        self.emit_key(key);
+        self.emit_key(key)?;
         EmitObject::new(self.emit)
     }
 }
 
 impl Drop for EmitObject<'_> {
     fn drop(&mut self) {
-        self.emit.put(b'}')
+        self.emit.put(b'}').unwrap();
     }
 }
 
@@ -223,7 +234,7 @@ mod private {
 /// Implemented for primitve and standard library types that can be emitted as JSON
 pub trait JsonEmit: private::Sealed {
     #[doc(hidden)]
-    fn write_to(&self, emit: &mut dyn EmitData);
+    fn write_to(&self, emit: &mut dyn EmitData) -> Result;
 }
 
 macro_rules! impl_json_emit_via_string_format {
@@ -231,8 +242,8 @@ macro_rules! impl_json_emit_via_string_format {
         $(
             impl private::Sealed for $ty {}
             impl JsonEmit for $ty {
-                fn write_to(&self, emit: &mut dyn EmitData) {
-                    write!(emit.write(), "{}", self).unwrap();
+                fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+                    emit_to!(emit.write(), "{}", self)
                 }
             }
         )*
@@ -245,23 +256,19 @@ impl_json_emit_via_string_format!(
 
 impl private::Sealed for str {}
 impl JsonEmit for str {
-    fn write_to(&self, emit: &mut dyn EmitData) {
-        emit.put(b'"');
-        for b in self.as_bytes() {
-            emit.put(*b)
-        }
-        emit.put(b'"');
+    fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+        emit.put(b'"')?;
+        emit.write().write_all(self.as_bytes())?;
+        emit.put(b'"')
     }
 }
 
 impl private::Sealed for String {}
 impl JsonEmit for String {
-    fn write_to(&self, emit: &mut dyn EmitData) {
-        emit.put(b'"');
-        for b in self.as_bytes() {
-            emit.put(*b)
-        }
-        emit.put(b'"');
+    fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+        emit.put(b'"')?;
+        emit.write().write_all(self.as_bytes())?;
+        emit.put(b'"')
     }
 }
 
@@ -272,11 +279,12 @@ macro_rules! impl_json_emit_for_generic_seq {
         where
             T: JsonEmit,
         {
-            fn write_to(&self, emit: &mut dyn EmitData) {
-                let mut a = EmitArray::new(emit);
+            fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+                let mut a = EmitArray::new(emit)?;
                 for val in self {
-                    a.emit(val)
+                    a.emit(val)?;
                 }
+                Ok(())
             }
         }
     };
@@ -296,8 +304,8 @@ where
     T: JsonEmit,
 {
     #[inline(always)]
-    fn write_to(&self, emit: &mut dyn EmitData) {
-        self.as_slice().write_to(emit);
+    fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+        self.as_slice().write_to(emit)
     }
 }
 
@@ -309,11 +317,12 @@ macro_rules! impl_json_emit_for_generic_map {
             K: AsRef<str>,
             V: JsonEmit,
         {
-            fn write_to(&self, emit: &mut dyn EmitData) {
-                let mut o = EmitObject::new(emit);
+            fn write_to(&self, emit: &mut dyn EmitData) -> Result {
+                let mut o = EmitObject::new(emit)?;
                 for (k, v) in self {
-                    o.emit(k, v);
+                    o.emit(k, v)?;
                 }
+                Ok(())
             }
         }
     };
@@ -322,7 +331,7 @@ macro_rules! impl_json_emit_for_generic_map {
 impl_json_emit_for_generic_map!(HashMap<K, V>);
 impl_json_emit_for_generic_map!(BTreeMap<K, V>);
 
-type Result = std::result::Result<(), Error>;
+type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Error(Box<ErrorCode>);

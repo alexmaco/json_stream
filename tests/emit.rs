@@ -1,3 +1,5 @@
+#![allow(unused_must_use)]
+
 use json_stream::emit::*;
 use std::any::type_name;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, LinkedList, VecDeque};
@@ -9,10 +11,10 @@ fn example() {
     {
         let mut e = Emitter::new(&mut buf);
 
-        let mut arr = e.array();
+        let mut arr = e.array().unwrap();
         arr.emit("a");
         {
-            let mut obj = arr.object();
+            let mut obj = arr.object().unwrap();
             obj.emit("k", "v");
         }
         arr.emit(&3);
@@ -27,7 +29,7 @@ fn commas_in_object() {
     {
         let mut e = Emitter::new(&mut buf);
 
-        let mut o = e.object();
+        let mut o = e.object().unwrap();
         o.emit("a", &1);
         o.emit("b", &2);
     }
@@ -41,9 +43,9 @@ fn commas_near_arrays_in_object() {
     {
         let mut e = Emitter::new(&mut buf);
 
-        let mut o = e.object();
+        let mut o = e.object().unwrap();
         o.emit_array("a");
-        let mut b = o.emit_array("b");
+        let mut b = o.emit_array("b").unwrap();
         b.emit(&3);
         b.emit(&4);
     }
@@ -125,7 +127,7 @@ fn chars() {
     let mut buf = vec![];
     {
         let mut e = Emitter::new(&mut buf);
-        let mut s = e.string();
+        let mut s = e.string().unwrap();
         s.char('a').unwrap();
         s.str("bcd").unwrap();
     }
@@ -141,8 +143,8 @@ fn emitter_newline_between_items() {
 
         e.emit(&3);
         e.emit("abc");
-        e.array().emit(&1);
-        e.object().emit("x", &5);
+        e.array().unwrap().emit(&1);
+        e.object().unwrap().emit("x", &5);
     }
 
     assert_eq!(
@@ -159,9 +161,9 @@ fn commas_in_array() {
     let mut buf = vec![];
     {
         let mut e = Emitter::new(&mut buf);
-        let mut arr = e.array();
-        arr.string().str("abc");
-        arr.string().str("def");
+        let mut arr = e.array().unwrap();
+        arr.string().unwrap().str("abc");
+        arr.string().unwrap().str("def");
     }
 
     assert_eq!(from_utf8(&buf).unwrap(), r#"["abc","def"]"#);
@@ -173,8 +175,8 @@ fn emitter_newline_after_string() {
     {
         let mut e = Emitter::new(&mut buf);
 
-        e.string().str("abc");
-        e.string().str("def");
+        e.string().unwrap().str("abc");
+        e.string().unwrap().str("def");
     }
 
     assert_eq!(
