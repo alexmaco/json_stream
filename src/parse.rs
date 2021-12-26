@@ -24,8 +24,7 @@ pub struct Parser<R: Read> {
     skips: Vec<Skip>,
 }
 
-type Result<'a> = StdResult<Json<'a>, Error>;
-type StdResult<T, E> = std::result::Result<T, E>;
+type Result<'a, T = Json<'a>> = std::result::Result<T, Error>;
 
 impl<R: Read> Parser<R> {
     /// Constructs a new Parser that will read from the provided object.
@@ -73,6 +72,7 @@ impl<R: Read> Parse for Parser<R> {
             Err(e) => panic!("error reading: {:?}", e),
         }
     }
+
     fn peek_byte(&mut self) -> Option<u8> {
         match self.src.peek()? {
             Ok(b) => Some(*b),
@@ -80,34 +80,28 @@ impl<R: Read> Parse for Parser<R> {
             Err(e) => panic!("error reading: {:?}", e),
         }
     }
+
     fn eat_until_whitespace(&mut self) {
-        loop {
-            match self.next_byte() {
-                None => break,
-                Some(b) => {
-                    if b.is_ascii_whitespace() {
-                        break;
-                    }
-                }
+        while let Some(b) = self.next_byte() {
+            if b.is_ascii_whitespace() {
+                break;
             }
         }
     }
+
     fn eat_whitespace(&mut self) {
-        loop {
-            match self.peek_byte() {
-                None => break,
-                Some(b) => {
-                    if !b.is_ascii_whitespace() {
-                        break;
-                    }
-                    self.next_byte();
-                }
+        while let Some(b) = self.peek_byte() {
+            if !b.is_ascii_whitespace() {
+                break;
             }
+            self.next_byte();
         }
     }
+
     fn add_skip(&mut self, s: Skip) {
         self.skips.push(s);
     }
+
     fn do_skips(&mut self) {
         if self.skips.is_empty() {
             return;
@@ -361,7 +355,7 @@ impl<'a> ParseObject<'a> {
             ended: false,
         }
     }
-    pub fn next(&mut self) -> Option<StdResult<KeyVal, Error>> {
+    pub fn next(&mut self) -> Option<Result<KeyVal>> {
         if self.ended {
             return None;
         }
@@ -502,7 +496,7 @@ impl<'a> ParseString<'a> {
     /// Parses the entire string into the supplied [`String`].
     /// This is useful to avoid allocating a new String,
     /// or for preallocating a buffer when string length can be guessed.
-    pub fn read_into(mut self, buf: &mut String) -> StdResult<(), Error> {
+    pub fn read_into(mut self, buf: &mut String) -> Result<()> {
         let parse = self.parse.take().unwrap();
         loop {
             match parse.next_byte() {
