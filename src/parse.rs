@@ -121,9 +121,18 @@ impl<R: Read> Parse for Parser<R> {
 fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> Result<'a> {
     match b {
         b'0'..=b'9' | b'-' => parse_number(parse, b),
-        b'n' => parse_ident(parse, b"ull", Json::Null),
-        b't' => parse_ident(parse, b"rue", Json::Bool(true)),
-        b'f' => parse_ident(parse, b"alse", Json::Bool(false)),
+        b'n' => {
+            must_eat_ident(parse, b"ull")?;
+            Ok(Json::Null)
+        }
+        b't' => {
+            must_eat_ident(parse, b"rue")?;
+            Ok(Json::Bool(true))
+        }
+        b'f' => {
+            must_eat_ident(parse, b"alse")?;
+            Ok(Json::Bool(false))
+        }
         b'[' => Ok(Json::Array(ParseArray::new(parse))),
         b'{' => Ok(Json::Object(ParseObject::new(parse))),
         b'"' => Ok(Json::String(ParseString::new(parse))),
@@ -135,7 +144,7 @@ fn next_any_item<'a>(b: u8, parse: &'a mut (dyn Parse + 'a)) -> Result<'a> {
     }
 }
 
-fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> Result<'a> {
+fn must_eat_ident<'a>(parse: &mut dyn Parse, ident: &[u8]) -> Result<'a, ()> {
     for b in ident {
         let read = match parse.next_byte() {
             Some(b) => b,
@@ -146,7 +155,7 @@ fn parse_ident<'a>(parse: &mut dyn Parse, ident: &[u8], res: Json<'a>) -> Result
             return Err(SyntaxError::InvalidIdentifier.into());
         }
     }
-    Ok(res)
+    Ok(())
 }
 
 fn parse_number(parse: &mut dyn Parse, byte: u8) -> Result {
