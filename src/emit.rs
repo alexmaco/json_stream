@@ -15,6 +15,7 @@ impl<W: Write> Emitter<W> {
         }
     }
 
+    #[inline]
     fn start(&mut self) {
         if !self.started {
             self.started = true;
@@ -31,7 +32,7 @@ impl<W: Write> Emit for Emitter<W> {
     }
 
     fn string(&mut self) -> EmitString {
-        // self.start()
+        self.start();
         EmitString::new(self)
     }
 
@@ -53,7 +54,7 @@ impl<'a> Emit for EmitArray<'a> {
     }
 
     fn string(&mut self) -> EmitString {
-        // self.start()
+        self.start();
         EmitString::new(self.emit)
     }
 
@@ -134,6 +135,7 @@ impl<'a> EmitArray<'a> {
         }
     }
 
+    #[inline]
     fn start(&mut self) {
         if !self.started {
             self.started = true;
@@ -163,6 +165,7 @@ impl<'a> EmitObject<'a> {
         }
     }
 
+    #[inline]
     fn start(&mut self) {
         if !self.started {
             self.started = true;

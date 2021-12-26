@@ -153,3 +153,33 @@ fn emitter_newline_between_items() {
 {"x":5}"#
     );
 }
+
+#[test]
+fn commas_in_array() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+        let mut arr = e.array();
+        arr.string().str("abc");
+        arr.string().str("def");
+    }
+
+    assert_eq!(from_utf8(&buf).unwrap(), r#"["abc","def"]"#);
+}
+
+#[test]
+fn emitter_newline_after_string() {
+    let mut buf = vec![];
+    {
+        let mut e = Emitter::new(&mut buf);
+
+        e.string().str("abc");
+        e.string().str("def");
+    }
+
+    assert_eq!(
+        from_utf8(&buf).unwrap(),
+        r#""abc"
+"def""#
+    );
+}
