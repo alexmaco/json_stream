@@ -311,7 +311,12 @@ where
 
 macro_rules! impl_json_emit_for_generic_map {
     ( $ty:ty ) => {
-        impl<K, V> private::Sealed for $ty {}
+        impl<K, V> private::Sealed for $ty
+        where
+            K: AsRef<str>,
+            V: JsonEmit,
+        {
+        }
         impl<K, V> JsonEmit for $ty
         where
             K: AsRef<str>,
