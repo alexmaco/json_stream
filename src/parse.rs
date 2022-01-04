@@ -252,7 +252,7 @@ impl From<f32> for Number {
 
 pub struct ParseArray<'a> {
     parse: Option<&'a mut dyn Parse>,
-    ended: bool,
+    ended: bool, // required because of https://github.com/rust-lang/rust/issues/54663
     needs_comma: bool,
 }
 
@@ -354,7 +354,7 @@ fn skip_array(parse: &mut dyn Parse) {
 
 pub struct ParseObject<'a> {
     parse: Option<&'a mut dyn Parse>,
-    ended: bool,
+    ended: bool, // required because of https://github.com/rust-lang/rust/issues/54663
 }
 
 impl<'a> ParseObject<'a> {
