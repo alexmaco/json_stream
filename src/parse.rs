@@ -17,6 +17,7 @@
 use core::convert::TryFrom;
 use std::io::{self, ErrorKind, Read};
 use std::iter::Peekable;
+use std::ptr;
 
 /// Reads bytes from a [`Read`], parses them as [`Json`], and returns a stream of values or sub-parsers via `fn next()`
 pub struct Parser<R: Read> {
@@ -179,7 +180,10 @@ fn parse_number(parse: &mut dyn Parse, byte: u8) -> Result {
         return Ok(Json::Number(Number::from(n)));
     }
 
-    let n = s.parse::<f64>().unwrap();
+    let n = match s.parse::<f64>() {
+        Ok(n) => n,
+        Err(_) => return Err(SyntaxError::InvalidNumber.into()),
+    };
     Ok(Json::Number(Number::from(n)))
 }
 
@@ -264,7 +268,10 @@ impl Debug for ParseString<'_> {
             f,
             "<{} for Parser@{:p}>",
             type_name::<Self>(),
-            self.parse.as_ref().unwrap()
+            self.parse
+                .as_ref()
+                .map(|p| *p as *const dyn Parse as *const ())
+                .unwrap_or(ptr::null())
         )
     }
 }
@@ -274,7 +281,10 @@ impl Debug for ParseArray<'_> {
             f,
             "<{} for Parser@{:p}>",
             type_name::<Self>(),
-            self.parse.as_ref().unwrap()
+            self.parse
+                .as_ref()
+                .map(|p| *p as *const dyn Parse as *const ())
+                .unwrap_or(ptr::null())
         )
     }
 }
@@ -284,7 +294,10 @@ impl Debug for ParseObject<'_> {
             f,
             "<{} for Parser@{:p}>",
             type_name::<Self>(),
-            self.parse.as_ref().unwrap()
+            self.parse
+                .as_ref()
+                .map(|p| *p as *const dyn Parse as *const ())
+                .unwrap_or(ptr::null())
         )
     }
 }
@@ -496,10 +509,10 @@ impl<'a> ParseString<'a> {
     }
 
     /// Parses the entire JSON string into a new [`String`]
-    pub fn read_owned(self) -> String {
+    pub fn read_owned(self) -> Result<'static, String> {
         let mut buf = String::new();
-        self.read_into(&mut buf).unwrap();
-        buf
+        self.read_into(&mut buf)?;
+        Ok(buf)
     }
 
     /// Parses the entire string into the supplied [`String`].
@@ -817,7 +830,7 @@ impl<'a> JsonAccess<'a> for Option<Result<'a>> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Error {
     err: Box<ErrorCode>,
 }
@@ -840,7 +853,7 @@ impl From<SyntaxError> for Error {
 }
 
 // Modeled after serde_json
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ErrorCode {
     /// Catchall for syntax error messages
     // Message(Box<str>),

@@ -13,7 +13,7 @@ fn example() {
 
     while let Some(item) = arr.next() {
         if let Ok(Json::String(s)) = item {
-            seen.push(s.read_owned());
+            seen.push(s.read_owned().expect("cannot read string"));
         }
     }
 
@@ -116,14 +116,14 @@ fn object_and_keyval() {
     };
 
     let mut kv = obj.next().unwrap().unwrap();
-    assert_eq!(kv.key().read_owned(), "a");
+    assert_eq!(kv.key().read_owned(), Ok("a".to_owned()));
     assert_eq!(kv.value().as_number(), Some(Number::from(2)));
 
     let kv = obj.next().unwrap().unwrap();
     assert!(kv.value().is_array());
 
     let mut kv = obj.next().unwrap().unwrap();
-    assert_eq!(kv.key().read_owned(), "c");
+    assert_eq!(kv.key().read_owned(), Ok("c".to_owned()));
     drop(kv);
 
     assert!(obj.next().is_none());
@@ -139,7 +139,7 @@ fn object_skipping() {
         .expect("expected root value to be an object");
 
     let mut kv = obj.next().unwrap().unwrap();
-    assert_eq!(kv.key().read_owned(), "a");
+    assert_eq!(kv.key().read_owned(), Ok("a".to_owned()));
     drop(kv);
 
     let kv = obj.next().unwrap().unwrap();
