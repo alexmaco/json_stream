@@ -48,6 +48,20 @@ fn chars_into_string() {
     assert_eq!(chars, "abc");
 }
 
+#[test]
+fn string_with_escapes() {
+    let mut p = Parser::new(r#""a\"bc""#.as_bytes());
+
+    let s = p
+        .next()
+        .as_string()
+        .expect("expected root value to be a string")
+        .read_owned()
+        .expect("cannot read");
+
+    assert_eq!(s, "a\"bc");
+}
+
 fn test_single_char(expected: char, s: &str) {
     let parsed = format!(r#""{}""#, s);
     let mut p = Parser::new(parsed.as_bytes());

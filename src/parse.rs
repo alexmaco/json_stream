@@ -520,13 +520,18 @@ impl<'a> ParseString<'a> {
     /// or for preallocating a buffer when string length can be guessed.
     pub fn read_into(mut self, buf: &mut String) -> Result<()> {
         let parse = self.parse.take().unwrap();
-        loop {
-            match parse.next_byte() {
-                None => break Err(SyntaxError::EofWhileParsingString.into()),
-                Some(b'"') => break Ok(()),
-                Some(c) => buf.push(c.into()),
+        let mut escape = false;
+        while let Some(b) = parse.next_byte() {
+            match b {
+                b'\\' if !escape => escape = true,
+                b'"' if !escape => return Ok(()),
+                c => {
+                    escape = false;
+                    buf.push(c.into());
+                }
             }
         }
+        Err(SyntaxError::EofWhileParsingString.into())
     }
 
     /// Parses this JSON string one [`char`] at a time,
